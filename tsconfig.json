@@ -3,7 +3,7 @@
     "target": "es2022",
     "module": "node16",
     "moduleResolution": "node16",
-    "types": ["node", "extensions/sane"],
+    "types": ["node", "extensions"],
     "lib": ["es2022"],
     "customConditions": ["development"],
     "esModuleInterop": true,

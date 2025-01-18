@@ -1,24 +1,30 @@
 #!/usr/bin/env node --experimental-transform-types --conditions development
 
 import assert from 'node:assert';
-import fs from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import path from 'node:path';
 
 import camelCase from 'lodash/camelCase.js';
 import kebabCase from 'lodash/kebabCase.js';
-import { type Browser, type Locator, type Page, chromium } from 'playwright';
-import { match } from 'ts-pattern';
+import { type Locator, type Page, chromium } from 'playwright';
+import { P, match } from 'ts-pattern';
 import { type Node, NodeFlags, SyntaxKind, addSyntheticLeadingComment, factory } from 'typescript';
+import yargs from 'yargs';
 
 import * as luaFactory from '#@/factory.js';
+import type { DocumentedVariableSignature } from '#@/types.js';
 import { Duration } from '#@/units.js';
-import { sleep } from '#@/utils.js';
+import { isCloudflareBlockedNotice, printList, serializeLocalFileURL, sleep, splitStringByPeriod } from '#@/utils.js';
 
 const {
   createToken,
+  createNull,
+  createLiteralTypeNode,
   createJSDocUnknownTag,
   createJSDocParameterTag,
   createModuleBlock,
+  createUnionTypeNode,
   createJSDocSeeTag,
   createModuleDeclaration,
   createJSDocReturnTag,
@@ -30,67 +36,79 @@ const {
   createJSDocTypeExpression,
 } = factory;
 
-let browser: Browser | undefined;
-const origin = 'https://warcraft.wiki.gg';
+const ORIGIN = 'https://warcraft.wiki.gg';
+const CACHE_DIRECTORY = '.cache';
+const DIST_DIRECTORY = 'dist';
 
-const cacheDirectory = '.cache';
 const cachedFiles: Record<string, string> = {};
 
-function extractNamespace(title: string): [string, string] {
-  const [ns, namespacedTitle] = title.split('.');
+const argv = await yargs(process.argv.slice(2))
+  .scriptName(basename(import.meta.filename))
+  .command('$0', '')
+  .option('force-download', {
+    describe: 'Force redownloading cached pages',
+    default: false,
+    type: 'boolean',
+  })
+  .demandCommand()
+  .usage('$0')
+  .help().argv;
 
-  if (!namespacedTitle) {
-    return ['core', ns];
-  }
+const api: {
+  [ns: string]: {
+    [func: string]: {
+      title: string;
+      description: string;
+      parameters: Array<{ name: string; type: string; nilable: boolean; description: string }>;
+      returns: Array<{ name: string; type: string; nilable: boolean; description: string }>;
+      events: Array<{ name: string; description: string }>;
+      sourceLink: string;
+      since?: string;
+    };
+  };
+} = {};
 
-  return [ns, namespacedTitle];
+const browser = await chromium.launch();
+
+const hasCachedPages = listPages().some((entry) => entry.includes('API'));
+
+if (!hasCachedPages || argv.forceDownload) {
+  await downloadPages();
 }
 
-function isCloudflareBlockedNotice(content: string) {
-  return content.includes('Sorry, you have been blocked') || content.includes('challenge-error-text');
-}
+await scrapePages();
 
-function serializeLocalFileURL(resourcePath: string) {
-  const filePath = path.join(cacheDirectory, `${resourcePath}.html`);
-  const fullFilePath = `${import.meta.dirname}/${filePath}`;
-  const localFileURL = new URL(`file://${fullFilePath}`);
-
-  return localFileURL;
-}
+await browser.close();
 
 async function cachePage(page: Page, resourcePath: string) {
   const html = await page.content();
 
-  const localFileURL = serializeLocalFileURL(resourcePath);
+  const localFileURL = serializeLocalFileURL(CACHE_DIRECTORY, resourcePath);
 
   if (isCloudflareBlockedNotice(html)) {
     delete cachedFiles[resourcePath];
-    fs.rmSync(localFileURL.pathname);
+    rmSync(localFileURL.pathname);
     throw new Error('Blocked');
   }
 
-  if (fs.existsSync(localFileURL.pathname)) {
+  if (existsSync(localFileURL.pathname)) {
     cachedFiles[resourcePath] = localFileURL.toString();
     return;
   }
 
-  fs.mkdirSync(path.dirname(localFileURL.pathname), { recursive: true });
-  fs.writeFileSync(localFileURL.pathname, html);
+  mkdirSync(path.dirname(localFileURL.pathname), { recursive: true });
+  writeFileSync(localFileURL.pathname, html);
 
-  console.info('Stored:', localFileURL);
+  console.info('Stored:', localFileURL.toString());
 }
 
 function resource(path: string) {
-  const page = cachedFiles[path] || `${origin}/${path}`;
+  const page = cachedFiles[path] || `${ORIGIN}/${path}`;
   console.info('Visiting', page);
   return page;
 }
 
 async function downloadPages() {
-  browser ||= await chromium.launch({
-    headless: true,
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  });
   const page = await browser.newPage();
 
   const entry = '/wiki/World_of_Warcraft_API';
@@ -144,15 +162,14 @@ async function downloadPages() {
   await scrapePages();
 }
 
-async function toVariableSignature([lhs, rhs]: [Locator, Locator]) {
-  const variableDetails = await rhs.textContent();
+async function toVariableSignature([lhs, rhs]: [Locator, Locator]): Promise<DocumentedVariableSignature> {
+  const [variableName, variableDetails] = await Promise.all([lhs.textContent(), rhs.textContent()]);
+
+  assert(variableName, 'Failed to extract variable name');
   assert(variableDetails, 'Failed to extract variable details');
 
-  const [_type, description] = variableDetails.trim().split(' - ');
+  const [_type, description = ''] = variableDetails.trim().split(' - ');
   const [t, opt] = _type.split(/(?=\?)/);
-
-  const variableName = await lhs.textContent();
-  assert(variableName, 'Failed to extract variable name');
 
   return {
     name: camelCase(variableName.trim()),
@@ -162,18 +179,6 @@ async function toVariableSignature([lhs, rhs]: [Locator, Locator]) {
   };
 }
 
-const api: {
-  [ns: string]: {
-    [func: string]: {
-      summary: string;
-      parameters: Array<{ name: string; type: string; nilable: boolean; description: string }>;
-      returns: Array<{ name: string; type: string; nilable: boolean; description: string }>;
-      sourceLink?: string;
-      since?: string;
-    };
-  };
-} = {};
-
 function mapTypeNode(type: string) {
   return match(type)
     .with('string', () => createKeywordTypeNode(SyntaxKind.StringKeyword))
@@ -181,76 +186,166 @@ function mapTypeNode(type: string) {
     .otherwise(() => createKeywordTypeNode(SyntaxKind.NumberKeyword));
 }
 
+type ScrapePageInput = {
+  title: string;
+  description: string;
+  parameterLocators: Locator[];
+  returnLocators: Locator[];
+  eventTriggerLocators: Locator[];
+  patchChangeLocators: Locator[];
+};
+async function scrapePage({
+  title,
+  description,
+  parameterLocators,
+  returnLocators,
+  eventTriggerLocators,
+  patchChangeLocators,
+}: ScrapePageInput) {
+  const [parameters = [], returns = []] = await Promise.all(
+    [parameterLocators, returnLocators].map(async (locators) => {
+      return Promise.all(
+        locators.map(async (locator) => {
+          const [variables, descriptions] = await Promise.all([
+            locator.locator('dt').all(),
+            locator.locator('dd').all(),
+          ]);
+
+          const zippedLines = variables.map((v, i) => [v, descriptions[i]].filter(Boolean)) as [Locator, Locator][];
+
+          return Promise.all(zippedLines.map(toVariableSignature));
+        }),
+      );
+    }),
+  );
+
+  const events = (await Promise.all(eventTriggerLocators.map(async (locator) => locator.textContent())))
+    .map((eventEntry) => {
+      if (!eventEntry) {
+        return null;
+      }
+
+      return match(/([A-Z_]+)(.*)/.exec(eventEntry))
+        .when(
+          (r) => !!r,
+          (result) => {
+            const [, name = null, description = ''] = result;
+            return name ? { name, description } : null;
+          },
+        )
+        .otherwise(() => null);
+    })
+    .filter(Boolean);
+
+  const since = (await Promise.all(patchChangeLocators.map(async (locator) => locator.textContent()))).find((t) => {
+    if (!t) {
+      return false;
+    }
+
+    return t.match(/added/i);
+  });
+
+  const semver = match(/(\d+\.\d+\.\d+)/.exec(since || ''))
+    .when(
+      (r) => !!r,
+      (result) => {
+        const [, semver] = result;
+        return semver;
+      },
+    )
+    .otherwise(() => undefined);
+
+  return {
+    title,
+    description,
+    parameters: parameters.flat(),
+    returns: returns.flat(),
+    events,
+    since: semver,
+  };
+}
+
+async function visitPage(page: Page, resourcePath: string) {
+  let isBlockedByCloudflare = true;
+  do {
+    await page.goto(resource(resourcePath));
+    try {
+      await cachePage(page, resourcePath);
+      isBlockedByCloudflare = false;
+    } catch {
+      await sleep(Duration.fromSeconds(1 + Math.random() * 5).asMillis());
+    }
+  } while (isBlockedByCloudflare);
+}
+
 async function scrapePages() {
   const subpages = listPages();
 
-  browser ||= await chromium.launch({
-    headless: true,
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  });
   const page = await browser.newPage();
 
-  for (const subpage of subpages.splice(30, 40)) {
-    let parsed = false;
-    do {
-      let isBlockedByCloudflare = true;
-      do {
-        await page.goto(resource(subpage));
-        try {
-          await cachePage(page, subpage);
-          isBlockedByCloudflare = false;
-        } catch {
-          await sleep(Duration.fromSeconds(1 + Math.random() * 5).asMillis());
-        }
-      } while (isBlockedByCloudflare);
+  for (const subpage of subpages.splice(360, 40)) {
+    await visitPage(page, subpage);
 
-      const pageTitle = (await page.locator('h1').first().textContent())?.trim();
-      assert(pageTitle, 'Failed to find a page title!');
+    const pageTitleLocator = page.locator('h1').first();
+    const pageBody = page.locator('//div[@id="mw-content-text"]/div[@class="mw-parser-output"]');
 
-      const [ns, namespacedTitle] = extractNamespace(pageTitle);
+    const descriptionLocator = pageBody.locator('> p:first-of-type');
 
-      api[ns] ||= {};
-      // biome-ignore lint/suspicious/noExplicitAny: TODO
-      api[ns][namespacedTitle] ||= { summary: null, parameters: [], returns: [] } as any;
-      const summaryNode = page.locator('//div[@id="mw-content-text"]/div[@class="mw-parser-output"]/p[1]');
+    const parametersHeaderLocator = pageBody.locator('h2:has(> #Arguments)');
+    const returnsHeaderLocator = pageBody.locator('h2:has(> #Returns)');
+    const eventTriggersHeaderLocator = pageBody.locator('h2:has(> #Triggers_events)');
+    const patchChangesHeaderLocator = pageBody.locator('h2:has(> #Patch_changes)');
 
-      api[ns][namespacedTitle].summary = (await summaryNode.textContent()).trim();
+    const [pageTitle, description, parameterLocators, returnLocators, eventTriggerLocators, patchChangeLocators] =
+      await Promise.all([
+        pageTitleLocator.textContent().then((content) => content?.trim()),
+        descriptionLocator.textContent().then((content) => content?.trim()),
+        parametersHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
+        returnsHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
+        eventTriggersHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
+        patchChangesHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
+      ] as const);
 
-      const subheaders = await summaryNode
-        .locator('//following-sibling::h2')
-        .filter({ has: page.locator('text="Arguments"').or(page.locator('text="Returns"')) })
-        .all();
-      for (const subheader of subheaders) {
-        const isArguments = !!(await subheader.filter({ hasText: 'Arguments' }).all()).length;
-        if (isArguments) {
-          const argumentsNode = subheader.locator('//following-sibling::dl[1]/dd/dl');
-          const variables = await argumentsNode.locator('dt').all();
-          const descriptions = await argumentsNode.locator('dd').all();
+    if (!pageTitle || !description) {
+      console.log('Skipped', subpage);
 
-          api[ns][namespacedTitle].parameters.push(
-            ...(await Promise.all(variables.map((v, i) => [v, descriptions[i]]).map(toVariableSignature))),
-          );
-        } else {
-          const returnsNode = subheader.locator('//following-sibling::dl[1]/dd/dl');
-          const variables = await returnsNode.locator('dt').all();
-          const descriptions = await returnsNode.locator('dd').all();
+      // SPecial handling for
+      // match(pageTitle)
+      //   .with('SPECIAL', ()=> {
+      //   });
+      continue;
+    }
 
-          api[ns][namespacedTitle].returns.push(
-            ...(await Promise.all(variables.map((v, i) => [v, descriptions[i]]).map(toVariableSignature))),
-          );
-        }
-      }
+    const [ns, title] = splitStringByPeriod(pageTitle);
+    const definition = await scrapePage({
+      title,
+      description,
+      parameterLocators,
+      returnLocators,
+      eventTriggerLocators,
+      patchChangeLocators,
+    });
 
-      parsed = true;
-    } while (!parsed);
+    api[ns] ||= {};
+    definition.events;
+    api[ns][definition.title] = {
+      ...definition,
+      sourceLink: `${ORIGIN}/${subpage}`,
+    };
   }
 
   for (const ns in api) {
     const nodes: Node[] = [];
     const isGlobal = ns === 'core';
 
-    for (const func in api[ns]) {
-      const { summary, parameters, returns, sourceLink = 'http://localhost', since = '1.0.0' } = api[ns][func];
+    for (const funcTitle in api[ns]) {
+      const func = api[ns][funcTitle];
+
+      if (!func) {
+        continue;
+      }
+
+      const { description, parameters, returns, events, sourceLink, since } = func;
 
       const parameterDeclarations = parameters.map((p) =>
         createParameterDeclaration(
@@ -261,28 +356,42 @@ async function scrapePages() {
           mapTypeNode(p.type),
         ),
       );
-      const returnType = luaFactory.createLuaMultiReturnTypeReferenceNode(
-        returns.map((p) =>
-          createNamedTupleMember(
-            undefined,
-            createIdentifier(p.name),
-            p.nilable ? createToken(SyntaxKind.QuestionToken) : undefined,
-            mapTypeNode(p.type),
-          ),
-        ),
-      );
+
+      const returnType = match(returns)
+        .with([], () => createKeywordTypeNode(SyntaxKind.VoidKeyword))
+        .with([P._], ([p]) => {
+          const truthyType = mapTypeNode(p.type);
+          const itemType = p.nilable
+            ? createUnionTypeNode([truthyType, createLiteralTypeNode(createNull())])
+            : truthyType;
+          return itemType;
+        })
+        .otherwise((returns) => {
+          return luaFactory.createLuaMultiReturnTypeReferenceNode(
+            returns.map((p) => {
+              const truthyType = mapTypeNode(p.type);
+              const itemType = p.nilable
+                ? createUnionTypeNode([truthyType, createLiteralTypeNode(createNull())])
+                : truthyType;
+
+              return createNamedTupleMember(undefined, createIdentifier(p.name), undefined, itemType);
+            }),
+          );
+        });
 
       const functionDeclaration = factory.createFunctionDeclaration(
         isGlobal ? [createToken(SyntaxKind.DeclareKeyword)] : undefined,
         undefined,
-        createIdentifier(func),
+        createIdentifier(func.title),
         undefined,
         parameterDeclarations,
         returnType,
         undefined,
       );
 
-      const comment = createJSDocComment(summary ? `${summary}\n` : undefined, [
+      const tags = [];
+
+      tags.push(
         ...parameters.map((p) =>
           createJSDocParameterTag(
             undefined,
@@ -293,6 +402,9 @@ async function scrapePages() {
             p.description,
           ),
         ),
+      );
+
+      tags.push(
         ...returns.map((p) =>
           createJSDocReturnTag(
             createIdentifier('returns'),
@@ -300,9 +412,21 @@ async function scrapePages() {
             [p.name, p.description].filter((pt) => !!pt).join(': '),
           ),
         ),
-        createJSDocSeeTag(undefined, undefined, sourceLink),
-        createJSDocUnknownTag(createIdentifier('since'), since),
-      ]);
+      );
+
+      tags.push(createJSDocSeeTag(undefined, undefined, sourceLink));
+
+      tags.push(
+        ...events.map((e) =>
+          createJSDocUnknownTag(createIdentifier('event'), [e.name, e.description].filter((pt) => !!pt).join(': ')),
+        ),
+      );
+
+      if (since) {
+        tags.push(createJSDocUnknownTag(createIdentifier('since'), since));
+      }
+
+      const comment = createJSDocComment(description ? `${description}\n` : undefined, tags);
 
       nodes.push(addSyntheticLeadingComment(comment, SyntaxKind.SingleLineCommentTrivia, '__REMOVE__', true));
       nodes.push(functionDeclaration);
@@ -321,35 +445,25 @@ async function scrapePages() {
       ])
       .exhaustive();
 
-    console.log(printList(output));
-    // Emit, flush __REMOVE__ and run biome to format
-    fs.writeFileSync(`${kebabCase(ns)}.d.ts`, printList(output));
-  }
+    if (!existsSync(DIST_DIRECTORY)) {
+      mkdirSync(DIST_DIRECTORY);
+    }
 
-  await browser.close();
+    // Emit, flush __REMOVE__ and run biome to format
+    writeFileSync(path.join(DIST_DIRECTORY, `${kebabCase(ns)}.d.ts`), printList(output));
+  }
 
   console.log('Scraping completed');
 }
 
 function listPages() {
-  const pages = fs
-    .readdirSync(path.join(cacheDirectory, 'wiki'))
-    .map((p) => path.join('wiki', p.substring(0, p.lastIndexOf('.'))));
+  const pages = readdirSync(path.join(CACHE_DIRECTORY, 'wiki')).map((p) =>
+    path.join('wiki', p.substring(0, p.lastIndexOf('.'))),
+  );
   for (const page of pages) {
-    const localFileURL = serializeLocalFileURL(page);
-    cachedFiles[page] = localFileURL;
+    const localFileURL = serializeLocalFileURL(CACHE_DIRECTORY, page);
+    cachedFiles[page] = localFileURL.toString();
   }
 
   return pages;
-}
-
-const hasCachedPages = listPages().some((entry) => entry.includes('API'));
-
-const [, , action] = process.argv;
-const scrape = action === '--scrape';
-
-if (scrape || !hasCachedPages) {
-  downloadPages();
-} else {
-  scrapePages();
 }

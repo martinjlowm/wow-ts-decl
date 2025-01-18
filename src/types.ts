@@ -4,6 +4,10 @@ export type VariableSignature = {
   nilable: boolean;
 };
 
+export type DocumentedVariableSignature = VariableSignature & {
+  description: string;
+};
+
 export type TypeAliasSignature = {
   name: string;
   type: string;
