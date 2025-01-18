@@ -7,6 +7,7 @@
 }: let
   nodejs = pkgs.nodejs_23;
   yarn = pkgs.yarn-berry.override {inherit nodejs;};
+  yarnCLI = "${yarn}/bin/yarn";
 in {
   packages = with pkgs; [nodejs yarn];
 
@@ -20,11 +21,10 @@ in {
       package = nodejs;
       binary = "node --experimental-transform-types";
     };
+    typescript-language-server.exec = ''
+      ${yarnCLI} node ${pkgs.typescript-language-server}/lib/node_modules/typescript-language-server/lib/cli.mjs "$@"
+    '';
   };
-
-  scripts.typescript-language-server.exec = ''
-    ${pkgs.nodePackages_latest.yarn}/bin/yarn typescript-language-server "$@"
-  '';
 
   git-hooks.hooks = {
     alejandra.enable = true;
