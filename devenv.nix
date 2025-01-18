@@ -8,8 +8,17 @@
   nodejs = pkgs.nodejs_23;
   yarn = pkgs.yarn-berry.override {inherit nodejs;};
   yarnCLI = "${yarn}/bin/yarn";
+  browsers = pkgs.playwright-driver.passthru.browsers.overrideAttrs (attrs: {
+    # This is not really an attribute, but arch is not part of the derivation,
+    # so the hash is shared between arm64 and x86_64 - let's generate a new hash
+    # and download the browsers instead of relying on cache
+    arch = "x86_64";
+  });
 in {
   packages = with pkgs; [nodejs yarn];
+
+  # Make sure this is in sync with the version via Yarn
+  env.PLAYWRIGHT_BROWSERS_PATH = browsers;
 
   scripts = {
     publish.exec = ''
