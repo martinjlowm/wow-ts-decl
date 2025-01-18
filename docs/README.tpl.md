@@ -34,7 +34,7 @@ $embed: ./snippets/steps/installation-tsconfig.json$
 
 ## Usage
 
-```bash
+```typescript
 $embed: ./snippets/steps/usage.ts$
 ```
 

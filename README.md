@@ -46,7 +46,7 @@ and add the desired declarations for your project, depending on what you develop
 
 ## Usage
 
-```bash
+```typescript
 const frame = CreateFrame('Frame');
 frame.GetParent();
 ```
@@ -57,8 +57,10 @@ All tools you'll need are set up with Nix, if you don't yet have it - you can
 install it with the following command.
 
 ```bash
+# Install Nix using the Determinate Systems installer
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
 
+# Install devenv
 nix-env --install --attr devenv -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
 
 # Enter a development shell with all the tooling available
