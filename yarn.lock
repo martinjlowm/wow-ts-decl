@@ -49,8 +49,7 @@ __metadata:
     "@typescript-to-lua/language-extensions": "npm:^1.19.0"
     lodash: "npm:^4.17.21"
     luaparse: "npm:^0.3.1"
-    playwright: "npm:^1.49.1"
-    playwright-cache.ts: "npm:^1.0.1"
+    playwright: "npm:1.47.0"
     ts-pattern: "npm:^5.6.0"
     typescript: "npm:^5.7.3"
     typescript-language-server: "npm:^4.3.3"
@@ -718,36 +717,27 @@ __metadata:
   languageName: node
   linkType: hard
 
-"playwright-cache.ts@npm:^1.0.1":
-  version: 1.0.1
-  resolution: "playwright-cache.ts@npm:1.0.1"
-  peerDependencies:
-    playwright: ^1.38.1
-  checksum: 10c0/f304b267416a0779be607e11c7d5e158f653ec4a891b543beed4fbeeede776624a878d7c8c58fd4ac5823e07777fad011bdf45a91840249b5da17aa41c44020e
-  languageName: node
-  linkType: hard
-
-"playwright-core@npm:1.49.1":
-  version: 1.49.1
-  resolution: "playwright-core@npm:1.49.1"
+"playwright-core@npm:1.47.0":
+  version: 1.47.0
+  resolution: "playwright-core@npm:1.47.0"
   bin:
     playwright-core: cli.js
-  checksum: 10c0/990b619c75715cd98b2c10c1180a126e3a454b247063b8352bc67792fe01183ec07f31d30c8714c3768cefed12886d1d64ac06da701f2baafc2cad9b439e3919
+  checksum: 10c0/70fdd2e62849176ff5403ec530a69d0ef07e6bebc8486f1f4bf49bc4b8a34ab27be0f91950f74a448db13b383d2ba6d934041493f286603de190937ebd0e7508
   languageName: node
   linkType: hard
 
-"playwright@npm:^1.49.1":
-  version: 1.49.1
-  resolution: "playwright@npm:1.49.1"
+"playwright@npm:1.47.0":
+  version: 1.47.0
+  resolution: "playwright@npm:1.47.0"
   dependencies:
     fsevents: "npm:2.3.2"
-    playwright-core: "npm:1.49.1"
+    playwright-core: "npm:1.47.0"
   dependenciesMeta:
     fsevents:
       optional: true
   bin:
     playwright: cli.js
-  checksum: 10c0/2368762c898920d4a0a5788b153dead45f9c36c3f5cf4d2af5228d0b8ea65823e3bbe998877950a2b9bb23a211e4633996f854c6188769dc81a25543ac818ab5
+  checksum: 10c0/fa47134246baf0951db435ae004a0ee98d5d1cfbb675d07a2c5dd3709866e69c092a568f0e8ec652e9e9fcb45e77335a44cd74b03d15369a7acb9c6e7a0a88d0
   languageName: node
   linkType: hard
 
