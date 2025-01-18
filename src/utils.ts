@@ -36,12 +36,6 @@ export function splitStringByPeriod(title: string): [string, string] {
   return [ns, namespacedTitle];
 }
 
-// Cloudflare responds with a block notice splash screen when bot-like behavior
-// is detected
-export function isCloudflareBlockedNotice(content: string) {
-  return content.includes('Sorry, you have been blocked') || content.includes('challenge-error-text');
-}
-
 export function serializeLocalFileURL(relativeDirectory: string, resourcePath: string) {
   const filePath = path.join(relativeDirectory, `${resourcePath}.html`);
   const fullFilePath = `${process.cwd()}/${filePath}`;

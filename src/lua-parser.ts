@@ -68,8 +68,8 @@ export function toFunction(func: FunctionSignature, field: luaparse.TableKeyStri
       func.type = JSON.parse(field.value.raw);
       break;
     }
-    case isArguments(field): {
-      func.arguments = field.value.fields.filter(isTableField).map(toProperty);
+    case isParameters(field): {
+      func.parameters = field.value.fields.filter(isTableField).map(toProperty);
 
       break;
     }
@@ -225,7 +225,7 @@ export function isTableField(
   return field.type === 'TableValue' && field.value.type === 'TableConstructorExpression';
 }
 
-export function isArguments(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
+export function isParameters(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
   value: luaparse.TableConstructorExpression;
 } {
   return field.key.name === 'Arguments' && field.value.type === 'TableConstructorExpression';

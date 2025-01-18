@@ -8,6 +8,11 @@ export type DocumentedVariableSignature = VariableSignature & {
   description: string;
 };
 
+export type ListItemDescription = {
+  name: string;
+  description: string;
+};
+
 export type TypeAliasSignature = {
   name: string;
   type: string;
@@ -16,7 +21,7 @@ export type TypeAliasSignature = {
 export type FunctionSignature = {
   name: string;
   type: string;
-  arguments: VariableSignature[];
+  parameters: VariableSignature[];
   returns: VariableSignature[];
 };
 
@@ -51,4 +56,19 @@ export type VersionedAPIDocumentation = {
 
 export type APIDocumentation = {
   [version: `v${number}.${number}`]: VersionedAPIDocumentation;
+};
+
+// FIXME: Merge together to one common structure
+export type APIDeclaration = {
+  [ns: string]: {
+    [func: string]: {
+      title: string;
+      description: string;
+      parameters: DocumentedVariableSignature[];
+      returns: DocumentedVariableSignature[];
+      events: ListItemDescription[];
+      sourceLink: string;
+      since?: string;
+    };
+  };
 };
