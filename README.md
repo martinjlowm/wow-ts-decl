@@ -28,7 +28,7 @@ npm i --save-dev @martinjlowm/wow-ts-decl
 
 and add the desired declarations for your project, depending on what you develop for:
 
-```json
+```jsonc
 {
   // ...
   "compilerOptions": {
