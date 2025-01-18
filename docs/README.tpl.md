@@ -1,4 +1,4 @@
-# TypeScript declarations for the World of Warcraft LUA API
+# TypeScript types for the World of Warcraft LUA API
 
 Typesafe API declarations for developers that seek a laid-back AddOn developer
 experience.
