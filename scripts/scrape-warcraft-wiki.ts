@@ -1,3 +1,5 @@
+#!/usr/bin/env node --experimental-transform-types --conditions development
+
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,33 +8,15 @@ import camelCase from 'lodash/camelCase.js';
 import kebabCase from 'lodash/kebabCase.js';
 import { type Browser, type Locator, type Page, chromium } from 'playwright';
 import { match } from 'ts-pattern';
-import {
-  ListFormat,
-  type Node,
-  NodeFlags,
-  ScriptTarget,
-  SyntaxKind,
-  addSyntheticLeadingComment,
-  createPrinter,
-  createSourceFile,
-  factory,
-} from 'typescript';
+import { type Node, NodeFlags, SyntaxKind, addSyntheticLeadingComment, factory } from 'typescript';
 
-import * as luaFactory from '#@/factory';
-import { Duration } from '#@/units';
-import { sleep } from '#@/utils';
-
-const printer = createPrinter();
-const buffer = createSourceFile('dummy.ts', '', ScriptTarget.ES2015);
-
-function printList(nodes: Node[]) {
-  return printer.printList(ListFormat.MultiLine, createNodeArray(nodes), buffer);
-}
+import * as luaFactory from '#@/factory.js';
+import { Duration } from '#@/units.js';
+import { sleep } from '#@/utils.js';
 
 const {
   createToken,
   createJSDocUnknownTag,
-  createNodeArray,
   createJSDocParameterTag,
   createModuleBlock,
   createJSDocSeeTag,
@@ -52,7 +36,7 @@ const origin = 'https://warcraft.wiki.gg';
 const cacheDirectory = '.cache';
 const cachedFiles: Record<string, string> = {};
 
-function extractNamespace(title: string) {
+function extractNamespace(title: string): [string, string] {
   const [ns, namespacedTitle] = title.split('.');
 
   if (!namespacedTitle) {
@@ -162,12 +146,16 @@ async function downloadPages() {
 
 async function toVariableSignature([lhs, rhs]: [Locator, Locator]) {
   const variableDetails = await rhs.textContent();
-  assert(variableDetails, 'Failed to extract');
+  assert(variableDetails, 'Failed to extract variable details');
+
   const [_type, description] = variableDetails.trim().split(' - ');
   const [t, opt] = _type.split(/(?=\?)/);
 
+  const variableName = await lhs.textContent();
+  assert(variableName, 'Failed to extract variable name');
+
   return {
-    name: camelCase((await lhs.textContent()).trim()),
+    name: camelCase(variableName.trim()),
     type: t,
     nilable: opt === '?',
     description,
@@ -216,7 +204,8 @@ async function scrapePages() {
         }
       } while (isBlockedByCloudflare);
 
-      const pageTitle = (await page.locator('h1').first().textContent()).trim();
+      const pageTitle = (await page.locator('h1').first().textContent())?.trim();
+      assert(pageTitle, 'Failed to find a page title!');
 
       const [ns, namespacedTitle] = extractNamespace(pageTitle);
 

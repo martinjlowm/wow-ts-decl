@@ -10,15 +10,15 @@ export class Duration {
   }
 
   static fromMinutes(mins: number): Duration {
-    return Duration.fromSeconds(m * 60);
+    return Duration.fromSeconds(mins * 60);
   }
 
   static fromHours(hrs: number): Duration {
-    return Duration.fromMinutes(m * 60);
+    return Duration.fromMinutes(hrs * 60);
   }
 
   static fromDays(days: number): Duration {
-    return Duration.fromHours(m * 24);
+    return Duration.fromHours(days * 24);
   }
 
   static fromWeeks(wks: number): Duration {

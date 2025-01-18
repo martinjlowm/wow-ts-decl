@@ -1,212 +1,63 @@
-import fs from 'node:fs';
-import { EmitHint, ScriptTarget, SyntaxKind, createPrinter, createSourceFile, factory } from 'typescript';
+#!/usr/bin/env node --experimental-transform-types --conditions development
 
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import path from 'node:path';
 import luaparse from 'luaparse';
-import { match } from 'ts-pattern';
+import { P, match } from 'ts-pattern';
+import yargs from 'yargs';
 
-// Parse all branches and emit API variants
-// Parse wowpedia and merge missing functions and docs
-// Map to TS structure and emit files nested under WoWAPI
+import { isKeyValueField, toAPIDefinition } from '#@/lua-parser.js';
+import type { FileAPIDocumentation, VersionedAPIDocumentation } from '#@/types.js';
 
-const printer = createPrinter();
-const buffer = createSourceFile('dummy.ts', '', ScriptTarget.ES2015);
-const { createKeywordTypeNode, createFunctionDeclaration } = factory;
+const argv = await yargs(process.argv.slice(2))
+  .scriptName(basename(import.meta.filename))
+  .command('$0 <branch>', '')
+  .demandCommand()
+  .positional('branch', {
+    describe: 'The branch from which to scrape the API',
+    type: 'string',
+  })
+  .usage('$0 <branch>')
+  .help().argv;
 
-const documentationPath = path.join('Interface', 'AddOns', 'Blizzard_APIDocumentationGenerated');
+const remote = 'https://github.com/Gethe/wow-ui-source';
 
-const files = fs.readdirSync(documentationPath).filter((file) => file.endsWith('.lua'));
+const { branch } = argv;
+// Already handled by yargs, but the type is not narrowed
+if (!branch) {
+  process.exit(1);
+}
 
-type TableField = luaparse.TableValue & {
-  value: luaparse.TableConstructorExpression;
+const temporaryDirectory = '.tmp';
+
+if (!existsSync(temporaryDirectory)) {
+  mkdirSync(temporaryDirectory);
+}
+
+const tmpPath = path.resolve(process.cwd(), temporaryDirectory);
+const repositoryDirectory = path.resolve(tmpPath, basename(remote));
+
+if (!existsSync(repositoryDirectory)) {
+  spawnSync('git', ['clone', remote], { cwd: tmpPath, stdio: 'inherit' });
+}
+
+spawnSync('git', ['checkout', branch], { cwd: repositoryDirectory, stdio: 'inherit' });
+
+const documentationPath = path.join(repositoryDirectory, 'Interface', 'AddOns', 'Blizzard_APIDocumentationGenerated');
+
+const files = readdirSync(documentationPath).filter((file) => file.endsWith('.lua'));
+
+const documentation: VersionedAPIDocumentation = {
+  events: [],
+  functions: [],
+  namespaces: {},
+  tables: [],
 };
-
-type FunctionSignature = {
-  name: string;
-  type: string;
-  arguments: VariableSignature[];
-  returns: VariableSignature[];
-};
-
-type TableSignature = {
-  name: string;
-  fields: VariableSignature[];
-};
-
-type APIDefinition = {
-  name: string;
-  type: string;
-  namespace: string;
-  functions: FunctionSignature[];
-  tables: TableSignature[];
-};
-
-type VariableSignature = {
-  name: string;
-  type: string;
-  nilable: boolean;
-};
-
-function toAPIDefinition(apiDefinition: APIDefinition, field: luaparse.TableKeyString) {
-  switch (true) {
-    case isName(field): {
-      apiDefinition.name = JSON.parse(field.value.raw);
-      break;
-    }
-    case isNamespace(field): {
-      apiDefinition.namespace = JSON.parse(field.value.raw);
-      break;
-    }
-    case isFunctionList(field): {
-      apiDefinition.functions = field.value.fields.filter(isTableField).map((func) => {
-        return func.value.fields.filter(isKeyValueField).reduce(toFunction, {} as FunctionSignature);
-      });
-      break;
-    }
-    case isTableList(field): {
-      apiDefinition.tables = field.value.fields.filter(isTableField).map((func) => {
-        return func.value.fields.filter(isKeyValueField).reduce(toTable, {} as TableSignature);
-      });
-      break;
-    }
-  }
-
-  return apiDefinition;
-}
-
-function toProperty(field: TableField) {
-  return field.value.fields.filter(isKeyValueField).reduce(toVariableSignature, {} as VariableSignature);
-}
-
-function toFunction(func: FunctionSignature, field: luaparse.TableKeyString) {
-  switch (true) {
-    case isName(field): {
-      func.name = JSON.parse(field.value.raw);
-      break;
-    }
-    case isType(field): {
-      func.type = JSON.parse(field.value.raw);
-      break;
-    }
-    case isArguments(field): {
-      func.arguments = field.value.fields.filter(isTableField).map(toProperty);
-
-      break;
-    }
-    case isReturns(field): {
-      func.returns = field.value.fields.filter(isTableField).map(toProperty);
-
-      break;
-    }
-  }
-
-  return func;
-}
-
-function toTable(table: TableSignature, field: luaparse.TableKeyString) {
-  switch (true) {
-    case isName(field): {
-      table.name = JSON.parse(field.value.raw);
-      break;
-    }
-    case isFields(field): {
-      table.fields = field.value.fields.filter(isTableField).map(toProperty);
-      break;
-    }
-  }
-
-  return table;
-}
-
-function toVariableSignature(signature: VariableSignature, field: luaparse.TableKeyString) {
-  switch (true) {
-    case isName(field): {
-      signature.name = JSON.parse(field.value.raw);
-      break;
-    }
-    case isType(field): {
-      const type = JSON.parse(field.value.raw);
-      const convertedType = match(type)
-        .with('cstring', () =>
-          printer.printNode(EmitHint.Unspecified, createKeywordTypeNode(SyntaxKind.StringKeyword), buffer),
-        )
-        .with('bool', () =>
-          printer.printNode(EmitHint.Unspecified, createKeywordTypeNode(SyntaxKind.BooleanKeyword), buffer),
-        )
-        .with('table', () =>
-          printer.printNode(EmitHint.Unspecified, createKeywordTypeNode(SyntaxKind.ObjectKeyword), buffer),
-        )
-        .otherwise((t) => t);
-
-      signature.type = convertedType;
-      break;
-    }
-    case isNilable(field): {
-      signature.nilable = field.value.value;
-      break;
-    }
-  }
-
-  return signature;
-}
-
-function isKeyValueField(
-  field: luaparse.TableKey | luaparse.TableKeyString | luaparse.TableValue,
-): field is luaparse.TableKeyString {
-  return field.type === 'TableKeyString';
-}
-function isName(field: luaparse.TableKeyString): field is luaparse.TableKeyString & { value: luaparse.StringLiteral } {
-  return field.key.name === 'Name' && field.value.type === 'StringLiteral';
-}
-function isType(field: luaparse.TableKeyString): field is luaparse.TableKeyString & { value: luaparse.StringLiteral } {
-  return field.key.name === 'Type' && field.value.type === 'StringLiteral';
-}
-function isNilable(
-  field: luaparse.TableKeyString,
-): field is luaparse.TableKeyString & { value: luaparse.BooleanLiteral } {
-  return field.key.name === 'Nilable' && field.value.type === 'BooleanLiteral';
-}
-
-function isNamespace(
-  field: luaparse.TableKeyString,
-): field is luaparse.TableKeyString & { value: luaparse.StringLiteral } {
-  return field.key.name === 'Namespace' && field.value.type === 'StringLiteral';
-}
-
-function isFields(
-  field: luaparse.TableKeyString,
-): field is luaparse.TableKeyString & { value: luaparse.TableConstructorExpression } {
-  return field.key.name === 'Fields' && field.value.type === 'TableConstructorExpression';
-}
-
-function isFunctionList(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
-  value: luaparse.TableConstructorExpression;
-} {
-  return field.key.name === 'Functions' && field.value.type === 'TableConstructorExpression';
-}
-function isTableList(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
-  value: luaparse.TableConstructorExpression;
-} {
-  return field.key.name === 'Tables' && field.value.type === 'TableConstructorExpression';
-}
-
-function isTableField(field: luaparse.TableKey | luaparse.TableKeyString | luaparse.TableValue): field is TableField {
-  return field.type === 'TableValue' && field.value.type === 'TableConstructorExpression';
-}
-
-function isArguments(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
-  value: luaparse.TableConstructorExpression;
-} {
-  return field.key.name === 'Arguments' && field.value.type === 'TableConstructorExpression';
-}
-function isReturns(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
-  value: luaparse.TableConstructorExpression;
-} {
-  return field.key.name === 'Returns' && field.value.type === 'TableConstructorExpression';
-}
 
 for (const file of files) {
-  const fileContents = fs.readFileSync(path.join(documentationPath, file)).toString();
+  const fileContents = readFileSync(path.join(documentationPath, file)).toString();
   const ast = luaparse.parse(fileContents);
 
   const definitionTable = ast.body.find((node) => node.type === 'LocalStatement');
@@ -216,17 +67,37 @@ for (const file of files) {
 
   const [documentationTable] = definitionTable.init;
   if (documentationTable?.type !== 'TableConstructorExpression') {
+    console.warn(`Table in ${file} was not the expected type of a TableConstructorExpression`);
     continue;
   }
 
-  console.log(
-    JSON.stringify(
-      documentationTable.fields.filter(isKeyValueField).reduce(toAPIDefinition, {} as APIDefinition),
-      undefined,
-      2,
-    ),
-  );
+  const { name, ns, ...docs } = documentationTable.fields
+    .filter(isKeyValueField)
+    .sort((l, r) => r.key.name.localeCompare(l.key.name))
+    .reduce(toAPIDefinition, {} as Partial<FileAPIDocumentation>);
+
+  if (name) {
+    console.info('Parsed', name);
+  }
+
+  const innerDocumentation = match(ns)
+    .with(P.string, (ns) => {
+      const doc: Omit<VersionedAPIDocumentation, 'namespaces'> = {
+        events: [],
+        functions: [],
+        tables: [],
+      };
+
+      documentation.namespaces[ns] = doc;
+
+      return documentation.namespaces[ns];
+    })
+    .otherwise(() => documentation);
+
+  innerDocumentation.events.push(...(docs.events || []));
+  innerDocumentation.functions.push(...(docs.functions || []));
+  innerDocumentation.tables.push(...(docs.tables || []));
 }
 
-// const parameters = [];
-// createFunctionDeclaration(undefined, undefined, 'IsDelveInProgress', undefined, parameters, )
+const output = path.resolve(temporaryDirectory, `${branch}.json`);
+writeFileSync(output, JSON.stringify(documentation, undefined, 2));

@@ -2,7 +2,7 @@
   "name": "@martinjlowm/wow-ts-decl",
   "version": "0.0.1",
   "type": "module",
-  "workspaces": ["docs/snippets"],
+  "workspaces": ["docs/snippets", "typings/extensions"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/martinjlowm/wow-ts-decl.git"
@@ -21,12 +21,16 @@
     }
   },
   "imports": {
+    "#@/*.js": {
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    },
     "#@/*": {
-      "development": ["./src/*", "./src/*.ts"],
-      "default": ["./dist/*", "./dist/*.js"]
+      "development": "./src/*",
+      "default": "./dist/*"
     },
     "#$/*": {
-      "default": ["./test/*", "./test/*.ts"]
+      "default": "./test/*"
     }
   },
   "license": "MIT",
@@ -34,6 +38,7 @@
     "@types/lodash": "^4.17.14",
     "@types/luaparse": "^0.2.12",
     "@types/node": "^22.10.6",
+    "@types/yargs": "^17.0.33",
     "@typescript-to-lua/language-extensions": "^1.19.0",
     "lodash": "^4.17.21",
     "luaparse": "^0.3.1",
@@ -41,6 +46,7 @@
     "playwright-cache.ts": "^1.0.1",
     "ts-pattern": "^5.6.0",
     "typescript": "^5.7.3",
-    "typescript-language-server": "^4.3.3"
+    "typescript-language-server": "^4.3.3",
+    "yargs": "^17.7.2"
   }
 }

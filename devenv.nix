@@ -37,7 +37,7 @@ in {
     biome = {
       package = pkgs.biome;
       enable = true;
-      entry = "${pkgs.biome}/bin/biome check --apply --no-errors-on-unmatched --diagnostic-level=error";
+      entry = "${pkgs.biome}/bin/biome check --apply --colors=off --no-errors-on-unmatched --diagnostic-level=error";
     };
     typos = {
       enable = true;

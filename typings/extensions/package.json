@@ -1,0 +1,5 @@
+{
+  "name": "@types/extensions",
+  "description": "Declarations for additional file extensions.",
+  "types": "index.d.ts"
+}

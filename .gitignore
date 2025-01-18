@@ -18,3 +18,4 @@ result
 
 node_modules
 .cache
+.tmp
