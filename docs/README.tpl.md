@@ -28,7 +28,7 @@ $embed: ./snippets/steps/installation-package.sh$
 
 and add the desired declarations for your project, depending on what you develop for:
 
-```json
+```jsonc
 $embed: ./snippets/steps/installation-tsconfig.json$
 ```
 
