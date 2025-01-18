@@ -93,3 +93,18 @@ unset SHELL_BIN
 
 Scripts for scraping documentation information for both source reside in
 `scripts/`.
+
+To generate the intermediate structures run the scripts as such,
+
+```bash
+./scripts/scrape-wow-ui-source.ts <branch>
+# and
+./scripts/scrape-warcraft-wiki.ts
+```
+
+For example,
+
+```bash
+./scripts/scrape-wow-ui-source.ts classic_era
+./scripts/scrape-wow-ui-source.ts live
+```

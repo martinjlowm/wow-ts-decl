@@ -56,3 +56,15 @@ $embed: ./snippets/steps/contributing-install-direnv.sh$
 
 Scripts for scraping documentation information for both source reside in
 `scripts/`.
+
+To generate the intermediate structures run the scripts as such,
+
+```bash
+$embed: ./snippets/steps/contributing-generate-structures.sh$
+```
+
+For example,
+
+```bash
+$embed: ./snippets/steps/contributing-generate-structures-example.sh$
+```
