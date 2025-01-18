@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "es2019",
+    "lib": ["es2019"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "module": "node16",
+    "baseUrl": ".",
+    "types": ["node"]
+  }
+}

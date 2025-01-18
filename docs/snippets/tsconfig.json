@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["*.ts"],
+  "compilerOptions": {
+    "target": "es2022",
+    "rootDir": ".",
+    "types": ["node", "@martinjlowm/wow-ts-decl"],
+    "lib": ["es2022"]
+  }
+}

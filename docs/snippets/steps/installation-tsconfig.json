@@ -1,0 +1,13 @@
+{
+  // ...
+  "compilerOptions": {
+    "types": [
+      // 1.12.x
+      // NOTE: Not emitted at this time!
+      //   Earlier versions can be implemented from https://warcraft.wiki.gg/wiki/World_of_Warcraft_API?oldid=559358
+      "@martinjlowm/wow-ts-decl/1.12.x",
+      // 1.15.x
+      "@martinjlowm/wow-ts-decl/1.15.x"
+    ]
+  }
+}
