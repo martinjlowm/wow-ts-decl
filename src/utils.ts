@@ -28,8 +28,8 @@ export function unhandledBranch(field: unknown) {
   console.warn('Unhandled branch for field', field, branchLocation.trim());
 }
 
-export function splitStringByPeriod(title: string): [string | undefined, string] {
-  const [ns, namespacedTitle] = title.split('.');
+export function splitStringByPeriodColon(title: string): [string | undefined, string] {
+  const [ns, namespacedTitle] = title.split(/\.|:/);
 
   if (!namespacedTitle) {
     return [undefined, ns];

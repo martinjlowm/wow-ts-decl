@@ -8,7 +8,7 @@ import { P, match } from 'ts-pattern';
 
 import type { EventSignature, FunctionSignature, VariableSignature } from '#@/types.js';
 import { Duration } from '#@/units.js';
-import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringByPeriod } from '#@/utils.js';
+import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringByPeriodColon } from '#@/utils.js';
 
 const overrides = {
   // CloseAllBags redirects to OpenAllBags where it and two other functions are
@@ -18,6 +18,11 @@ const overrides = {
     pageTitleFormat: (str: string | undefined) => str?.split('()')[0],
     descriptionSelector: '> ul:first-of-type > li:nth-child(2)',
     descriptionFormat: (str: string | undefined) => str?.split(' ').slice(1).join(' '),
+  },
+  // Example is above the snippet and there's a empty paragraph at the top of
+  // the page :shrug:
+  ChatFrame_AddChannel: {
+    descriptionSelector: '> p:nth-of-type(2)',
   },
 };
 
@@ -154,6 +159,7 @@ export class WikiScraper {
 
     const descriptionSelector = match(resource)
       .with(P.string.includes('CloseAllBags'), () => overrides.CloseAllBags.descriptionSelector)
+      .with(P.string.includes('ChatFrame_AddChannel'), () => overrides.ChatFrame_AddChannel.descriptionSelector)
       .otherwise(() => '> p:first-of-type');
 
     const descriptionLocator = pageBody.locator(descriptionSelector);
@@ -182,7 +188,7 @@ export class WikiScraper {
       ] as const);
 
     if (!pageTitle || !description) {
-      throw new Error('Needs special handling');
+      throw new Error(`Needs special handling: ${{ pageTitle }} ${{ description }}`);
     }
 
     return extractFunction({
@@ -334,7 +340,7 @@ export async function extractFunction({
   eventTriggerLocators,
   patchChangeLocators,
 }: ExtractFunctionInput) {
-  const [ns, name] = splitStringByPeriod(pageTitle);
+  const [ns, name] = splitStringByPeriodColon(pageTitle.replace(/\(|\)/g, ''));
 
   const [parameters = [], returns = []] = await Promise.all(
     [parameterLocators, returnLocators].map(async (locators) => {
@@ -419,7 +425,7 @@ export async function extractEvent({
   eventTriggerLocators,
   patchChangeLocators,
 }: ExtractFunctionInput) {
-  const [ns, name] = splitStringByPeriod(pageTitle);
+  const [ns, name] = splitStringByPeriodColon(pageTitle);
 
   const [parameters = [], returns = []] = await Promise.all(
     [parameterLocators, returnLocators].map(async (locators) => {
