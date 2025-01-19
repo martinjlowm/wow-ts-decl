@@ -1,17 +1,82 @@
-import type { Range, SemVer } from 'semver';
+import { Range, SemVer, valid } from 'semver';
+import z from 'zod';
 
-export type VariableSignature = {
-  name: string;
-  type: string;
-  nilable: boolean;
-};
+const variableSignatureSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  nilable: z.boolean(),
+});
+
+export type VariableSignature = z.infer<typeof variableSignatureSchema>;
+
+const versionedSchema = z.object({
+  version: z.string().transform((str) => {
+    if (valid(str)) {
+      return new SemVer(str);
+    }
+
+    return new Range(str);
+  }),
+});
+
+export type Versioned = z.infer<typeof versionedSchema>;
+
+const namespacedSchema = z.object({
+  ns: z.string(),
+});
+
+export type Namespaced = z.infer<typeof namespacedSchema>;
+
+const listItemDescriptionSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+});
+
+export type ListItemDescription = z.infer<typeof listItemDescriptionSchema>;
+
+const functionSchema = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    parameters: z.array(variableSignatureSchema),
+    returns: z.array(variableSignatureSchema),
+    events: z.array(listItemDescriptionSchema),
+  })
+  .merge(versionedSchema)
+  .merge(namespacedSchema);
+
+export type FunctionSignature = z.infer<typeof functionSchema>;
+
+const tableSchema = z
+  .object({
+    name: z.string(),
+    fields: z.array(variableSignatureSchema),
+  })
+  .merge(versionedSchema)
+  .merge(namespacedSchema);
+
+export type TableSignature = z.infer<typeof tableSchema>;
+
+const eventSchema = z
+  .object({
+    name: z.string(),
+    literalName: z.string(),
+    payload: z.array(variableSignatureSchema),
+  })
+  .merge(versionedSchema)
+  .merge(namespacedSchema);
+
+export type EventSignature = z.infer<typeof eventSchema>;
+
+export const apiSchema = z.object({
+  functions: z.array(functionSchema),
+  tables: z.array(tableSchema),
+  events: z.array(eventSchema),
+});
+
+export type APISchema = z.infer<typeof apiSchema>;
 
 export type DocumentedVariableSignature = VariableSignature & {
-  description: string;
-};
-
-export type ListItemDescription = {
-  name: string;
   description: string;
 };
 
@@ -19,35 +84,6 @@ export type TypeAliasSignature = {
   name: string;
   type: string;
 };
-
-export type Namespace = {
-  functions: FunctionSignature[];
-  events: EventSignature[];
-  tables: TableSignature[];
-};
-
-export type Versioned = { version: SemVer | Range };
-export type Namespaced = { ns: string };
-
-export type FunctionSignature = Versioned &
-  Namespaced & {
-    name: string;
-    parameters: VariableSignature[];
-    returns: VariableSignature[];
-  };
-
-export type TableSignature = Versioned &
-  Namespaced & {
-    name: string;
-    fields: VariableSignature[];
-  };
-
-export type EventSignature = Versioned &
-  Namespaced & {
-    name: string;
-    literalName: string;
-    payload: VariableSignature[];
-  };
 
 export type FileAPIDocumentation = {
   name: string;
@@ -68,19 +104,4 @@ export type VersionedAPIDocumentation = {
 
 export type APIDocumentation = {
   [version: `v${number}.${number}`]: VersionedAPIDocumentation;
-};
-
-// FIXME: Merge together to one common structure
-export type APIDeclaration = {
-  [ns: string]: {
-    [func: string]: {
-      title: string;
-      description: string;
-      parameters: DocumentedVariableSignature[];
-      returns: DocumentedVariableSignature[];
-      events: ListItemDescription[];
-      sourceLink: string;
-      since?: string;
-    };
-  };
 };

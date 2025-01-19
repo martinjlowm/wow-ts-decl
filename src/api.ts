@@ -1,10 +1,12 @@
 import { Range, SemVer, satisfies as semverSatisfies } from 'semver';
-import type {
-  EventSignature,
-  FunctionSignature,
-  ListItemDescription,
-  TableSignature,
-  VariableSignature,
+import {
+  type APISchema,
+  type EventSignature,
+  type FunctionSignature,
+  type ListItemDescription,
+  type TableSignature,
+  type VariableSignature,
+  apiSchema,
 } from '#@/types.js';
 import { identicalArrays } from '#@/utils.js';
 
@@ -86,6 +88,7 @@ export class APIFunction extends Version implements FunctionSignature {
   description: string;
   parameters: VariableSignature[];
   returns: VariableSignature[];
+  events: ListItemDescription[];
   ns: string;
 
   constructor(props: APIFunctionProps) {
@@ -96,6 +99,7 @@ export class APIFunction extends Version implements FunctionSignature {
     this.parameters = props.parameters;
     this.returns = props.returns;
     this.version = props.version;
+    this.events = props.events;
     this.ns = props.ns || API.DEFAULT_NAMESPACE;
   }
 
@@ -173,7 +177,7 @@ export class APIEvent extends Version implements EventSignature {
   }
 }
 
-export class API {
+export class API implements APISchema {
   static DEFAULT_NAMESPACE = 'WoWAPI';
 
   functions: APIFunction[];
@@ -245,6 +249,18 @@ export class API {
 
   serialize() {
     return JSON.stringify(this, undefined, 2);
+  }
+
+  static load(content: string) {
+    const parsed = apiSchema.parse(JSON.parse(content));
+
+    const api = new API();
+
+    api.functions.push(...parsed.functions.map((f) => new APIFunction(f)));
+    api.tables.push(...parsed.tables.map((t) => new APITable(t)));
+    api.events.push(...parsed.events.map((e) => new APIEvent(e)));
+
+    return api;
   }
 }
 
