@@ -3,6 +3,7 @@ import z from 'zod';
 
 const variableSignatureSchema = z.object({
   name: z.string(),
+  description: z.string().default(''),
   type: z.string(),
   nilable: z.boolean(),
 });
@@ -22,7 +23,7 @@ const versionedSchema = z.object({
 export type Versioned = z.infer<typeof versionedSchema>;
 
 const namespacedSchema = z.object({
-  ns: z.string(),
+  ns: z.string().optional(),
 });
 
 export type Namespaced = z.infer<typeof namespacedSchema>;
@@ -75,10 +76,6 @@ export const apiSchema = z.object({
 });
 
 export type APISchema = z.infer<typeof apiSchema>;
-
-export type DocumentedVariableSignature = VariableSignature & {
-  description: string;
-};
 
 export type TypeAliasSignature = {
   name: string;
