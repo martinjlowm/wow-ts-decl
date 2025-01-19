@@ -91,13 +91,23 @@ Scripts for scraping documentation information for both source reside in
 To generate the intermediate structures run the scripts as such,
 
 ```bash
-./scripts/scrape-wow-ui-source.ts <git-ref>
-# and
+# 1.
+./scripts/scrape-wow-ui-source.ts <git-semver-tag>
+
+# 2.
 ./scripts/scrape-warcraft-wiki.ts
+
+# 3.
+./scripts/merge-sources.ts
 ```
 
 For example,
 
 ```bash
+# Generate type data
 ./scripts/scrape-wow-ui-source.ts 1.15.4 11.0.7
+./scripts/scrape-warcraft-wiki.ts
+
+# Emit TypeScript declarations
+./scripts/merge-sources.ts 1.15.4 11.0.7
 ```

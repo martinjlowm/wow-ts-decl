@@ -5,7 +5,7 @@ import { basename, resolve } from 'node:path';
 
 import yargs from 'yargs';
 
-import { API, APIFunction } from '#@/api.js';
+import { API, APIEvent, APIFunction } from '#@/api.js';
 import { WikiScraper } from '#@/wiki-scraper.js';
 
 const argv = await yargs(process.argv.slice(2))
@@ -32,7 +32,6 @@ const argv = await yargs(process.argv.slice(2))
     type: 'string',
   })
   .demandCommand()
-  .usage('$0')
   .help().argv;
 
 const { outDir, cacheDir: cacheDirectory, wikiOriginEndpoint } = argv;
@@ -44,10 +43,14 @@ const wiki = new WikiScraper({
   origin: wikiOriginEndpoint,
 });
 
-const funcs = await wiki.scrape(argv.forceDownload);
+const { functions, events } = await wiki.scrape(argv.forceDownload);
 
-for (const func of funcs) {
+for (const func of functions) {
   api.addFunction(new APIFunction(func));
+}
+
+for (const event of events) {
+  api.addEvent(new APIEvent(event));
 }
 
 const output = resolve(outDir, 'wiki.json');

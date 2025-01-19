@@ -4,9 +4,9 @@ import { dirname, join } from 'node:path';
 
 import camelCase from 'lodash/camelCase.js';
 import { type Browser, type Locator, type Page, chromium } from 'playwright';
-import { match } from 'ts-pattern';
+import { P, match } from 'ts-pattern';
 
-import type { FunctionSignature, VariableSignature } from '#@/types.js';
+import type { EventSignature, FunctionSignature, VariableSignature } from '#@/types.js';
 import { Duration } from '#@/units.js';
 import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringByPeriod } from '#@/utils.js';
 
@@ -92,40 +92,39 @@ export class WikiScraper {
 
     const page = await browser.newPage();
 
-    const entry = '/wiki/World_of_Warcraft_API';
+    for (const entry of ['/wiki/World_of_Warcraft_API', '/wiki/Events']) {
+      await page.goto(this.resourceReference(entry));
+      await this.cachePage(page, entry);
 
-    await page.goto(this.resourceReference(entry));
+      const subpages = [];
 
-    await this.cachePage(page, entry);
+      // Gets all immediate links from description details following the primary
+      // headings, effectively the link of all function declarations
+      const links = await page.locator('//div[@id="mw-content-text"]/div[@class="mw-parser-output"]/dl/dd/a[1]').all();
 
-    const subpages = [];
+      const chunkSize = 20;
+      const chunkedLinks = [...Array(Math.ceil(links.length / chunkSize))].map((_) => links.splice(0, chunkSize));
 
-    // Gets all immediate links from description details following the primary
-    // headings, effectively the link of all function declarations
-    const links = await page.locator('//div[@id="mw-content-text"]/div[@class="mw-parser-output"]/dl/dd/a[1]').all();
+      for (const chunk of chunkedLinks) {
+        subpages.push(
+          ...(
+            await Promise.all(
+              chunk.map(async (a) => {
+                const link = await a.getAttribute('href');
+                if (!link?.startsWith('/')) {
+                  return null;
+                }
+                console.log('Found', link);
+                return link;
+              }),
+            )
+          ).filter((link) => typeof link === 'string'),
+        );
+      }
 
-    const chunkSize = 20;
-    const chunkedLinks = [...Array(Math.ceil(links.length / chunkSize))].map((_) => links.splice(0, chunkSize));
-
-    for (const chunk of chunkedLinks) {
-      subpages.push(
-        ...(
-          await Promise.all(
-            chunk.map(async (a) => {
-              const link = await a.getAttribute('href');
-              if (!link?.startsWith('/')) {
-                return null;
-              }
-              console.log('Found', link);
-              return link;
-            }),
-          )
-        ).filter((link) => typeof link === 'string'),
-      );
-    }
-
-    for (const subpage of subpages) {
-      await this.visitPage(page, subpage);
+      for (const subpage of subpages) {
+        await this.visitPage(page, subpage);
+      }
     }
 
     console.info('Page download completed!');
@@ -174,34 +173,103 @@ export class WikiScraper {
     });
   }
 
+  async scrapeEventPage(page: Page, resource: string) {
+    await this.visitPage(page, resource);
+
+    const pageTitleLocator = page.locator('h1').first();
+    const pageBody = page.locator('//div[@id="mw-content-text"]/div[@class="mw-parser-output"]');
+
+    const descriptionLocator = pageBody.locator('> p:first-of-type');
+
+    const parametersHeaderLocator = pageBody.locator('h2:has(> #Arguments)');
+    const returnsHeaderLocator = pageBody.locator('h2:has(> #Returns)');
+    const eventTriggersHeaderLocator = pageBody.locator('h2:has(> #Triggers_events)');
+    const patchChangesHeaderLocator = pageBody.locator('h2:has(> #Patch_changes)');
+
+    const [pageTitle, description, parameterLocators, returnLocators, eventTriggerLocators, patchChangeLocators] =
+      await Promise.all([
+        pageTitleLocator.textContent().then((content) => content?.trim()),
+        descriptionLocator.textContent().then((content) => content?.trim()),
+        parametersHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
+        returnsHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
+        eventTriggersHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
+        patchChangesHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
+      ] as const);
+
+    if (!pageTitle || !description) {
+      console.log('Skipped', resource);
+
+      // SPecial handling for
+      // match(pageTitle)
+      //   .with('SPECIAL', ()=> {
+      //   });
+      return;
+    }
+
+    // TODO
+    return extractEvent({
+      pageTitle,
+      description,
+      parameterLocators,
+      returnLocators,
+      eventTriggerLocators,
+      patchChangeLocators,
+    }) as unknown as EventSignature;
+  }
+
   async scrape(forceDownload: boolean) {
     const browser = await this.init();
 
-    const hasCachedPages = this.listPages().some((entry) => entry.includes('API'));
+    const subpages = this.listPages().reduce<{ functions: string[]; events: string[] }>(
+      (pages, page) => {
+        match(page)
+          .with(P.string.includes('wiki/API'), (p) => {
+            pages.functions.push(p);
+          })
+          .otherwise((p) => {
+            pages.events.push(p);
+          });
 
+        return pages;
+      },
+      { functions: [], events: [] },
+    );
+
+    const hasCachedPages = !!subpages.functions.length || !!subpages.events.length;
     if (!hasCachedPages || forceDownload) {
       await this.downloadPages();
     }
 
-    const subpages = this.listPages();
-
     const page = await browser.newPage();
 
-    const funcs: FunctionSignature[] = [];
+    const functions: FunctionSignature[] = [];
+    const events: EventSignature[] = [];
 
-    for (const subpage of subpages) {
+    for (const subpage of subpages.functions) {
       const func = await this.scrapeFunctionPage(page, subpage);
 
       if (!func) {
         continue;
       }
 
-      funcs.push(func);
+      functions.push(func);
+    }
+
+    for (const subpage of subpages.events) {
+      const event = await this.scrapeEventPage(page, subpage);
+
+      if (!event) {
+        continue;
+      }
+
+      events.push(event);
     }
 
     console.log('Scraping completed');
 
-    return funcs;
+    await browser.close();
+
+    return { functions, events };
   }
 }
 
@@ -237,6 +305,91 @@ type ExtractFunctionInput = {
   patchChangeLocators: Locator[];
 };
 export async function extractFunction({
+  pageTitle,
+  description,
+  parameterLocators,
+  returnLocators,
+  eventTriggerLocators,
+  patchChangeLocators,
+}: ExtractFunctionInput) {
+  const [ns, name] = splitStringByPeriod(pageTitle);
+
+  const [parameters = [], returns = []] = await Promise.all(
+    [parameterLocators, returnLocators].map(async (locators) => {
+      return Promise.all(
+        locators.map(async (locator) => {
+          const [variables, descriptions] = await Promise.all([
+            locator.locator('> dt').all(),
+            locator.locator('> dd').all(),
+          ]);
+
+          const zippedLines = variables.map((v, i) => [v, descriptions[i]].filter(Boolean)) as [Locator, Locator][];
+
+          return Promise.all(zippedLines.map(parseLocatorPairToVariableSignature));
+        }),
+      );
+    }),
+  );
+
+  const [eventsText, patchChangesText] = await Promise.all([
+    Promise.all(eventTriggerLocators.map(async (locator) => locator.textContent())),
+    Promise.all(patchChangeLocators.map(async (locator) => locator.textContent())),
+  ]);
+
+  const events = eventsText
+    .map((eventEntry) => {
+      if (!eventEntry) {
+        return null;
+      }
+
+      return match(/([A-Z_]+)(.*)/.exec(eventEntry))
+        .when(
+          (r) => !!r,
+          (result) => {
+            const [, name = null, description = ''] = result;
+            return name ? { name, description } : null;
+          },
+        )
+        .otherwise(() => null);
+    })
+    .filter(Boolean);
+
+  const since = patchChangesText.filter(Boolean).find((t) => {
+    if (!t) {
+      return false;
+    }
+
+    return t.match(/added/i);
+  });
+
+  const until = patchChangesText.filter(Boolean).find((t) => {
+    if (!t) {
+      return false;
+    }
+
+    return t.match(/removed/i);
+  });
+
+  return {
+    name,
+    ns,
+    description,
+    parameters: parameters.flat(),
+    returns: returns.flat(),
+    events,
+    version: extractSemanticRange(since, until),
+  };
+}
+
+type ExtractEventInput = {
+  pageTitle: string;
+  description: string;
+  parameterLocators: Locator[];
+  returnLocators: Locator[];
+  eventTriggerLocators: Locator[];
+  patchChangeLocators: Locator[];
+};
+export async function extractEvent({
   pageTitle,
   description,
   parameterLocators,

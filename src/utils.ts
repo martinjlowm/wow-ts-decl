@@ -63,14 +63,14 @@ export function extractSemanticRange(since: string | undefined, until: string | 
       .otherwise(() => undefined);
   });
 
-  let range = '';
+  const range = [];
   if (parsedSince) {
-    range += `>=${parsedSince}`;
+    range.push(`>=${parsedSince}`);
   }
 
   if (parsedUntil) {
-    range += `<${parsedUntil}`;
+    range.push(`<${parsedUntil}`);
   }
 
-  return new Range(range || '*');
+  return new Range(range.join(' ') || '*');
 }

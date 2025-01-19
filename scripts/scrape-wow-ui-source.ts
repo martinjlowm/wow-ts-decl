@@ -38,7 +38,6 @@ const argv = await yargs(process.argv.slice(2))
     type: 'string',
     array: false,
   })
-  .usage('$0 [semver..]')
   .help().argv;
 
 const { semver, cacheDir, outDir, repository } = argv;
