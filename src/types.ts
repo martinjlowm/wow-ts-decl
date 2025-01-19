@@ -37,7 +37,7 @@ export type ListItemDescription = z.infer<typeof listItemDescriptionSchema>;
 const functionSchema = z
   .object({
     name: z.string(),
-    description: z.string(),
+    description: z.string().optional(),
     parameters: z.array(variableSignatureSchema),
     returns: z.array(variableSignatureSchema),
     events: z.array(listItemDescriptionSchema),

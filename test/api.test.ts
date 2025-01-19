@@ -232,4 +232,32 @@ describe('API', () => {
       expect(filtered.functions).toHaveLength(1);
     });
   });
+
+  it('(de-)serialization', () => {
+    const leftFunction = new APIFunction({
+      name: 'FooBar',
+      parameters: [],
+      returns: [],
+      version: new SemVer('1.0.0'),
+    });
+
+    const left = new API();
+    left.addFunction(leftFunction);
+
+    const rightFunction = new APIFunction({
+      name: 'FooBar',
+      parameters: [],
+      returns: [],
+      version: new SemVer('2.0.0'),
+    });
+    const right = new API();
+    right.addFunction(rightFunction);
+
+    const combined = left.combine(right);
+
+    const serialized = combined.serialize();
+    const loaded = API.load(serialized);
+
+    expect(serialized).toEqual(loaded.serialize());
+  });
 });

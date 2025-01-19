@@ -80,7 +80,7 @@ export type APIFunctionProps = {
   ns?: string;
   parameters: VariableSignature[];
   returns: VariableSignature[];
-  events: ListItemDescription[];
+  events?: ListItemDescription[];
   version: SemVer | Range;
 };
 export class APIFunction extends Version implements FunctionSignature {
@@ -99,7 +99,7 @@ export class APIFunction extends Version implements FunctionSignature {
     this.parameters = props.parameters;
     this.returns = props.returns;
     this.version = props.version;
-    this.events = props.events;
+    this.events = props.events || [];
     this.ns = props.ns || API.DEFAULT_NAMESPACE;
   }
 
