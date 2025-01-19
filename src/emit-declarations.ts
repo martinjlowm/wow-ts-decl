@@ -5,7 +5,6 @@ import kebabCase from 'lodash/kebabCase.js';
 import { P, match } from 'ts-pattern';
 import { type Node, NodeFlags, SyntaxKind, addSyntheticLeadingComment, factory } from 'typescript';
 
-import { DIST_DIRECTORY } from '#@/constants.js';
 import * as luaFactory from '#@/factory.js';
 import type { APIDeclaration } from '#@/types.js';
 import { printList } from '#@/utils.js';
@@ -36,7 +35,7 @@ function mapTypeNode(type: string) {
     .otherwise(() => createKeywordTypeNode(SyntaxKind.NumberKeyword));
 }
 
-export function emitDeclarations(api: APIDeclaration) {
+export function emitDeclarations(api: APIDeclaration, outDir: string) {
   for (const ns in api) {
     const nodes: Node[] = [];
     const isGlobal = ns === 'core';
@@ -148,12 +147,11 @@ export function emitDeclarations(api: APIDeclaration) {
       ])
       .exhaustive();
 
-    // Return the following to the caller
-    if (!existsSync(DIST_DIRECTORY)) {
-      mkdirSync(DIST_DIRECTORY);
+    if (!existsSync(outDir)) {
+      mkdirSync(outDir);
     }
 
     // Emit, flush __REMOVE__ and run biome to format
-    writeFileSync(join(DIST_DIRECTORY, `${kebabCase(ns)}.d.ts`), printList(output));
+    writeFileSync(join(outDir, `${kebabCase(ns)}.d.ts`), printList(output));
   }
 }

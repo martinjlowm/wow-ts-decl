@@ -6,7 +6,6 @@ import camelCase from 'lodash/camelCase.js';
 import type { Browser, Locator, Page } from 'playwright';
 import { match } from 'ts-pattern';
 
-import { CACHE_DIRECTORY } from '#@/constants.js';
 import { emitDeclarations } from '#@/emit-declarations.js';
 import type { APIDeclaration, DocumentedVariableSignature } from '#@/types.js';
 import { Duration } from '#@/units.js';
@@ -18,10 +17,15 @@ export function isCloudflareBlockedNotice(content: string) {
   return content.includes('Sorry, you have been blocked') || content.includes('challenge-error-text');
 }
 
-export async function cachePage(cachedFiles: Record<string, string>, page: Page, resourcePath: string) {
+export async function cachePage(
+  cacheDirectory: string,
+  cachedFiles: Record<string, string>,
+  page: Page,
+  resourcePath: string,
+) {
   const html = await page.content();
 
-  const localFileURL = serializeLocalFileURL(CACHE_DIRECTORY, resourcePath);
+  const localFileURL = serializeLocalFileURL(cacheDirectory, resourcePath);
 
   if (isCloudflareBlockedNotice(html)) {
     delete cachedFiles[resourcePath];
@@ -46,12 +50,18 @@ export function resourceReference(cachedFiles: Record<string, string>, origin: s
   return page;
 }
 
-export async function visitPage(cachedFiles: Record<string, string>, page: Page, origin: string, resourcePath: string) {
+export async function visitPage(
+  cacheDirectory: string,
+  cachedFiles: Record<string, string>,
+  page: Page,
+  origin: string,
+  resourcePath: string,
+) {
   let isBlockedByCloudflare = true;
   do {
     await page.goto(resourceReference(cachedFiles, origin, resourcePath));
     try {
-      await cachePage(cachedFiles, page, resourcePath);
+      await cachePage(cacheDirectory, cachedFiles, page, resourcePath);
       isBlockedByCloudflare = false;
     } catch {
       await sleep(Duration.fromSeconds(1 + Math.random() * 5).asMillis());
@@ -163,10 +173,11 @@ export async function scrapePage({
   };
 }
 
-export function listPages(cachedFiles: Record<string, string>) {
-  const pages = readdirSync(join(CACHE_DIRECTORY, 'wiki')).map((p) => join('wiki', p.substring(0, p.lastIndexOf('.'))));
+export function listPages(cacheDirectory: string, cachedFiles: Record<string, string>) {
+  const pages = readdirSync(join(cacheDirectory, 'wiki')).map((p) => join('wiki', p.substring(0, p.lastIndexOf('.'))));
+
   for (const page of pages) {
-    const localFileURL = serializeLocalFileURL(CACHE_DIRECTORY, page);
+    const localFileURL = serializeLocalFileURL(cacheDirectory, page);
     cachedFiles[page] = localFileURL.toString();
   }
 
@@ -178,13 +189,15 @@ export async function scrapePages(
   cachedFiles: Record<string, string>,
   origin: string,
   api: APIDeclaration,
+  cacheDirectory: string,
+  outDir: string,
 ) {
-  const subpages = listPages(cachedFiles);
+  const subpages = listPages(cacheDirectory, cachedFiles);
 
   const page = await browser.newPage();
 
   for (const subpage of subpages) {
-    await visitPage(cachedFiles, page, origin, subpage);
+    await visitPage(cacheDirectory, cachedFiles, page, origin, subpage);
 
     const pageTitleLocator = page.locator('h1').first();
     const pageBody = page.locator('//div[@id="mw-content-text"]/div[@class="mw-parser-output"]');
@@ -236,5 +249,5 @@ export async function scrapePages(
 
   console.log('Scraping completed');
 
-  return emitDeclarations(api);
+  return emitDeclarations(api, outDir);
 }

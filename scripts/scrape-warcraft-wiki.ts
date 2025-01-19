@@ -18,6 +18,16 @@ const argv = await yargs(process.argv.slice(2))
     default: false,
     type: 'boolean',
   })
+  .option('cache-dir', {
+    describe: 'Directory to cache visited pages',
+    default: '.cache',
+    type: 'string',
+  })
+  .option('out-dir', {
+    describe: 'Directory to emit intermediate documentation',
+    default: 'dist',
+    type: 'string',
+  })
   .option('wiki-origin-endpoint', {
     describe: 'The wiki page from which the API documentation can be scraped.',
     default: 'https://warcraft.wiki.gg',
@@ -27,19 +37,19 @@ const argv = await yargs(process.argv.slice(2))
   .usage('$0')
   .help().argv;
 
-const { wikiOriginEndpoint } = argv;
+const { outDir, cacheDir: cacheDirectory, wikiOriginEndpoint } = argv;
 
 const api: APIDeclaration = {};
 
 const browser = await chromium.launch();
 
-const hasCachedPages = listPages(cachedFiles).some((entry) => entry.includes('API'));
+const hasCachedPages = listPages(cacheDirectory, cachedFiles).some((entry) => entry.includes('API'));
 
 if (!hasCachedPages || argv.forceDownload) {
   await downloadPages();
 }
 
-await scrapePages(browser, cachedFiles, wikiOriginEndpoint, api);
+await scrapePages(browser, cachedFiles, wikiOriginEndpoint, api, cacheDirectory, outDir);
 
 await browser.close();
 
@@ -50,7 +60,7 @@ async function downloadPages() {
 
   await page.goto(resourceReference(cachedFiles, wikiOriginEndpoint, entry));
 
-  await cachePage(cachedFiles, page, entry);
+  await cachePage(cacheDirectory, cachedFiles, page, entry);
 
   const subpages = [];
 
@@ -79,7 +89,7 @@ async function downloadPages() {
   }
 
   for (const subpage of subpages) {
-    await visitPage(cachedFiles, page, wikiOriginEndpoint, subpage);
+    await visitPage(cacheDirectory, cachedFiles, page, wikiOriginEndpoint, subpage);
   }
 
   console.info('Page download completed!');

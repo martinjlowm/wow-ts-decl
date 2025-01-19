@@ -1,17 +1,21 @@
-{pkgs, ...}: let
+{
+  pkgs,
+  yarn,
+  ...
+}: let
   inherit (builtins.fromJSON (builtins.readFile ../package.json)) version;
-  yarn = callPackage ./packages/yarn.nix {};
-  wiki = callPackage ./wiki.nix {};
-  wow-ui-source = callPackage ./wow-ui-source.nix {};
+  nodejs = import ./packages/nodejs.nix;
+  yarn = import ./packages/yarn.nix;
   jq = "${pkgs.jq}/bin/jq";
 in
   stdenvNoCC.mkDerivation {
-    name = "wow-ts-decl-${version}";
+    name = "wow-ts-decl-wow-ui-source-${version}";
 
     src = lib.fileset.toSource {
       root = ../.;
       fileset = lib.fileset.unions [
         ../src
+        ../scripts
         ../package.json
         ../.npmrc
         ../tsconfig.json
@@ -23,7 +27,7 @@ in
       ];
     };
 
-    buildInputs = [pkgs.cacert];
+    buildInputs = [pkgs.cacert nodejs.pkg];
 
     dontStrip = true;
 
@@ -35,7 +39,7 @@ in
 
     buildPhase = ''
       ${yarn.bin} install --immutable
-      ./scripts/combine-sources.ts --wow-ui-source=${wow-ui-source} --wiki=${wiki}
+      ./scripts/scrape-warcraft-wiki.ts --out-dir=$out
     '';
 
     installPhase = ''
@@ -49,7 +53,7 @@ in
 
     meta = with lib; {
       homepage = "https://github.com/martinjlowm/wow-ts-decl";
-      description = "Typesafe API declarations for developers that seek a laid-back AddOn developer experience.";
+      description = "Grafana CDK constructs for defining dashboards as typesafe Infrastructure as Code, IaC.";
       platforms = platforms.linux ++ platforms.darwin;
     };
   }

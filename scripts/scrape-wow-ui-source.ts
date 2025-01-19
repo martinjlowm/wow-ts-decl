@@ -9,7 +9,6 @@ import { P, match } from 'ts-pattern';
 import yargs from 'yargs';
 
 import { isKeyValueField, toAPIDefinition } from '#@/lua-parser.js';
-import { cachePage } from '#@/playwright.js';
 import type { FileAPIDocumentation, VersionedAPIDocumentation } from '#@/types.js';
 
 const argv = await yargs(process.argv.slice(2))

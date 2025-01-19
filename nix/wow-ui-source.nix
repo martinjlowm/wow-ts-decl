@@ -1,17 +1,22 @@
-{pkgs, ...}: let
+{
+  callPackage,
+  jq,
+  cacert,
+  ...
+}: let
   inherit (builtins.fromJSON (builtins.readFile ../package.json)) version;
+  nodejs = callPackage ./packages/nodejs.nix {};
   yarn = callPackage ./packages/yarn.nix {};
-  wiki = callPackage ./wiki.nix {};
-  wow-ui-source = callPackage ./wow-ui-source.nix {};
-  jq = "${pkgs.jq}/bin/jq";
+  jq = "${jq}/bin/jq";
 in
   stdenvNoCC.mkDerivation {
-    name = "wow-ts-decl-${version}";
+    name = "wow-ts-decl-wow-ui-source-${version}";
 
     src = lib.fileset.toSource {
       root = ../.;
       fileset = lib.fileset.unions [
         ../src
+        ../scripts
         ../package.json
         ../.npmrc
         ../tsconfig.json
@@ -23,7 +28,7 @@ in
       ];
     };
 
-    buildInputs = [pkgs.cacert];
+    buildInputs = [cacert nodejs.pkg];
 
     dontStrip = true;
 
@@ -35,7 +40,9 @@ in
 
     buildPhase = ''
       ${yarn.bin} install --immutable
-      ./scripts/combine-sources.ts --wow-ui-source=${wow-ui-source} --wiki=${wiki}
+      ./scripts/scrape-wow-ui-source.ts 1.15.4 --out-dir=$out
+      ./scripts/scrape-wow-ui-source.ts 11.0.7 --out-dir=$out
+      ./scripts/scrape-wow-ui-source.ts 4.4.1 --out-dir=$out
     '';
 
     installPhase = ''
@@ -49,7 +56,7 @@ in
 
     meta = with lib; {
       homepage = "https://github.com/martinjlowm/wow-ts-decl";
-      description = "Typesafe API declarations for developers that seek a laid-back AddOn developer experience.";
+      description = "Grafana CDK constructs for defining dashboards as typesafe Infrastructure as Code, IaC.";
       platforms = platforms.linux ++ platforms.darwin;
     };
   }
