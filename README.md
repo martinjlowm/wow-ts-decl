@@ -97,7 +97,7 @@ Scripts for scraping documentation information for both source reside in
 To generate the intermediate structures run the scripts as such,
 
 ```bash
-./scripts/scrape-wow-ui-source.ts <branch>
+./scripts/scrape-wow-ui-source.ts <git-ref>
 # and
 ./scripts/scrape-warcraft-wiki.ts
 ```
@@ -106,5 +106,6 @@ For example,
 
 ```bash
 ./scripts/scrape-wow-ui-source.ts classic_era
+./scripts/scrape-wow-ui-source.ts 1.15.4
 ./scripts/scrape-wow-ui-source.ts live
 ```

@@ -13,22 +13,22 @@ import type { FileAPIDocumentation, VersionedAPIDocumentation } from '#@/types.j
 
 const argv = await yargs(process.argv.slice(2))
   .scriptName(basename(import.meta.filename))
-  .command('$0 <branch>', '')
+  .command('$0 <git-ref>', '')
   .demandCommand()
-  .positional('branch', {
-    describe: 'The branch from which to scrape the API',
+  .positional('git-ref', {
+    describe: 'The branch, tag or some other git reference from which to scrape the API',
+    default: 'classic_era',
     type: 'string',
   })
-  .usage('$0 <branch>')
+  .option('repository', {
+    describe: 'The repository with documentation to scrape',
+    default: 'https://github.com/Gethe/wow-ui-source',
+    type: 'string',
+  })
+  .usage('$0 <git-ref>')
   .help().argv;
 
-const remote = 'https://github.com/Gethe/wow-ui-source';
-
-const { branch } = argv;
-// Already handled by yargs, but the type is not narrowed
-if (!branch) {
-  process.exit(1);
-}
+const { gitRef, repository } = argv;
 
 const temporaryDirectory = '.tmp';
 
@@ -37,13 +37,13 @@ if (!existsSync(temporaryDirectory)) {
 }
 
 const tmpPath = path.resolve(process.cwd(), temporaryDirectory);
-const repositoryDirectory = path.resolve(tmpPath, basename(remote));
+const repositoryDirectory = path.resolve(tmpPath, basename(repository));
 
 if (!existsSync(repositoryDirectory)) {
-  spawnSync('git', ['clone', remote], { cwd: tmpPath, stdio: 'inherit' });
+  spawnSync('git', ['clone', repository], { cwd: tmpPath, stdio: 'inherit' });
 }
 
-spawnSync('git', ['checkout', branch], { cwd: repositoryDirectory, stdio: 'inherit' });
+spawnSync('git', ['checkout', gitRef], { cwd: repositoryDirectory, stdio: 'inherit' });
 
 const documentationPath = path.join(repositoryDirectory, 'Interface', 'AddOns', 'Blizzard_APIDocumentationGenerated');
 
@@ -99,5 +99,5 @@ for (const file of files) {
   innerDocumentation.tables.push(...(docs.tables || []));
 }
 
-const output = path.resolve(temporaryDirectory, `${branch}.json`);
+const output = path.resolve(temporaryDirectory, `${gitRef}.json`);
 writeFileSync(output, JSON.stringify(documentation, undefined, 2));
