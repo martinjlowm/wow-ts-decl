@@ -18,6 +18,7 @@ in {
 
   # Make sure this is in sync with the version via Yarn
   env.PLAYWRIGHT_BROWSERS_PATH = browsers;
+  env.NODE_OPTIONS = "--disable-warning=ExperimentalWarning";
 
   scripts = {
     publish.exec = ''

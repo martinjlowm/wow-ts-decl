@@ -28,6 +28,8 @@ const argv = await yargs(process.argv.slice(2))
   .usage('$0 <git-ref>')
   .help().argv;
 
+// Turn gitRefs into an array so we can checkout all desired versions and
+// generate individual declaration files accordingly
 const { gitRef, repository } = argv;
 
 const temporaryDirectory = '.tmp';

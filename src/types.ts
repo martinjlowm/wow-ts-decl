@@ -1,3 +1,5 @@
+import type { Range, SemVer } from 'semver';
+
 export type VariableSignature = {
   name: string;
   type: string;
@@ -18,24 +20,34 @@ export type TypeAliasSignature = {
   type: string;
 };
 
-export type FunctionSignature = {
-  name: string;
-  type: string;
-  parameters: VariableSignature[];
-  returns: VariableSignature[];
+export type Namespace = {
+  functions: FunctionSignature[];
+  events: EventSignature[];
+  tables: TableSignature[];
 };
 
-export type TableSignature = {
-  name: string;
-  fields: VariableSignature[];
-};
+export type Versioned = { version: SemVer | Range };
+export type Namespaced = { ns: string };
 
-export type EventSignature = {
-  name: string;
-  type: string;
-  literalName: string;
-  payload: VariableSignature[];
-};
+export type FunctionSignature = Versioned &
+  Namespaced & {
+    name: string;
+    parameters: VariableSignature[];
+    returns: VariableSignature[];
+  };
+
+export type TableSignature = Versioned &
+  Namespaced & {
+    name: string;
+    fields: VariableSignature[];
+  };
+
+export type EventSignature = Versioned &
+  Namespaced & {
+    name: string;
+    literalName: string;
+    payload: VariableSignature[];
+  };
 
 export type FileAPIDocumentation = {
   name: string;

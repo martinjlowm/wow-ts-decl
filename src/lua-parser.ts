@@ -65,7 +65,8 @@ export function toFunction(func: FunctionSignature, field: luaparse.TableKeyStri
       break;
     }
     case isType(field): {
-      func.type = JSON.parse(field.value.raw);
+      // Don't care
+      // func.type = JSON.parse(field.value.raw);
       break;
     }
     case isParameters(field): {
@@ -114,7 +115,8 @@ export function toEvent(event: EventSignature, field: luaparse.TableKeyString) {
       break;
     }
     case isType(field): {
-      event.type = JSON.parse(field.value.raw);
+      // Don't care
+      // event.type = JSON.parse(field.value.raw);
       break;
     }
     case isFields(field): {

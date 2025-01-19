@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import { Range } from 'semver';
+import { match } from 'ts-pattern';
 import { ListFormat, type Node, ScriptTarget, createPrinter, createSourceFile, factory } from 'typescript';
 
 const { createNodeArray } = factory;
@@ -26,11 +28,11 @@ export function unhandledBranch(field: unknown) {
   console.warn('Unhandled branch for field', field, branchLocation.trim());
 }
 
-export function splitStringByPeriod(title: string): [string, string] {
+export function splitStringByPeriod(title: string): [string | undefined, string] {
   const [ns, namespacedTitle] = title.split('.');
 
   if (!namespacedTitle) {
-    return ['core', ns];
+    return [undefined, ns];
   }
 
   return [ns, namespacedTitle];
@@ -42,4 +44,33 @@ export function serializeLocalFileURL(relativeDirectory: string, resourcePath: s
   const localFileURL = new URL(`file://${fullFilePath}`);
 
   return localFileURL;
+}
+
+export function identicalArrays<T>(left: T[], right: T[], predicate: (l: T) => (r: T) => boolean) {
+  return left.length === right.length && left.every((f) => right.some(predicate(f)));
+}
+
+export function extractSemanticRange(since: string | undefined, until: string | undefined) {
+  const [parsedSince, parsedUntil] = [since, until].map((v) => {
+    return match(/(\d+\.\d+\.\d+)/.exec(v || ''))
+      .when(
+        (r) => !!r,
+        (result) => {
+          const [, semver] = result;
+          return semver;
+        },
+      )
+      .otherwise(() => undefined);
+  });
+
+  let range = '';
+  if (parsedSince) {
+    range += `>=${parsedSince}`;
+  }
+
+  if (parsedUntil) {
+    range += `<${parsedUntil}`;
+  }
+
+  return new Range(range || '*');
 }

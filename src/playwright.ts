@@ -4,12 +4,14 @@ import { dirname, join } from 'node:path';
 
 import camelCase from 'lodash/camelCase.js';
 import type { Browser, Locator, Page } from 'playwright';
+import { Range } from 'semver';
 import { match } from 'ts-pattern';
 
+import { type API, APIFunction } from '#@/api.js';
 import { emitDeclarations } from '#@/emit-declarations.js';
-import type { APIDeclaration, DocumentedVariableSignature } from '#@/types.js';
+import type { DocumentedVariableSignature } from '#@/types.js';
 import { Duration } from '#@/units.js';
-import { serializeLocalFileURL, sleep, splitStringByPeriod } from '#@/utils.js';
+import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringByPeriod } from '#@/utils.js';
 
 // Cloudflare responds with a block notice splash screen when bot-like behavior
 // is detected
@@ -90,7 +92,7 @@ export async function parseLocatorPairToVariableSignature([lhs, rhs]: [
 }
 
 type ScrapePageInput = {
-  title: string;
+  pageTitle: string;
   description: string;
   parameterLocators: Locator[];
   returnLocators: Locator[];
@@ -98,13 +100,15 @@ type ScrapePageInput = {
   patchChangeLocators: Locator[];
 };
 export async function scrapePage({
-  title,
+  pageTitle,
   description,
   parameterLocators,
   returnLocators,
   eventTriggerLocators,
   patchChangeLocators,
 }: ScrapePageInput) {
+  const [ns, name] = splitStringByPeriod(pageTitle);
+
   const [parameters = [], returns = []] = await Promise.all(
     [parameterLocators, returnLocators].map(async (locators) => {
       return Promise.all(
@@ -145,7 +149,7 @@ export async function scrapePage({
     })
     .filter(Boolean);
 
-  const since = patchChangesText.find((t) => {
+  const since = patchChangesText.filter(Boolean).find((t) => {
     if (!t) {
       return false;
     }
@@ -153,23 +157,22 @@ export async function scrapePage({
     return t.match(/added/i);
   });
 
-  const semver = match(/(\d+\.\d+\.\d+)/.exec(since || ''))
-    .when(
-      (r) => !!r,
-      (result) => {
-        const [, semver] = result;
-        return semver;
-      },
-    )
-    .otherwise(() => undefined);
+  const until = patchChangesText.filter(Boolean).find((t) => {
+    if (!t) {
+      return false;
+    }
+
+    return t.match(/removed/i);
+  });
 
   return {
-    title,
+    name,
+    ns,
     description,
     parameters: parameters.flat(),
     returns: returns.flat(),
     events,
-    since: semver,
+    version: extractSemanticRange(since, until),
   };
 }
 
@@ -188,7 +191,7 @@ export async function scrapePages(
   browser: Browser,
   cachedFiles: Record<string, string>,
   origin: string,
-  api: APIDeclaration,
+  api: API,
   cacheDirectory: string,
   outDir: string,
 ) {
@@ -196,7 +199,7 @@ export async function scrapePages(
 
   const page = await browser.newPage();
 
-  for (const subpage of subpages) {
+  for (const subpage of subpages.splice(0, 10)) {
     await visitPage(cacheDirectory, cachedFiles, page, origin, subpage);
 
     const pageTitleLocator = page.locator('h1').first();
@@ -229,9 +232,8 @@ export async function scrapePages(
       continue;
     }
 
-    const [ns, title] = splitStringByPeriod(pageTitle);
     const definition = await scrapePage({
-      title,
+      pageTitle,
       description,
       parameterLocators,
       returnLocators,
@@ -239,15 +241,10 @@ export async function scrapePages(
       patchChangeLocators,
     });
 
-    api[ns] ||= {};
-    definition.events;
-    api[ns][definition.title] = {
-      ...definition,
-      sourceLink: `${origin}/${subpage}`,
-    };
+    api.addFunction(new APIFunction(definition));
   }
 
   console.log('Scraping completed');
 
-  return emitDeclarations(api, outDir);
+  // return emitDeclarations(api, outDir);
 }

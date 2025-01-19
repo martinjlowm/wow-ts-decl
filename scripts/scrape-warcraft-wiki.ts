@@ -5,8 +5,8 @@ import { basename } from 'node:path';
 import { chromium } from 'playwright';
 import yargs from 'yargs';
 
+import { API, APIBuilder } from '#@/api.js';
 import { cachePage, listPages, resourceReference, scrapePages, visitPage } from '#@/playwright.js';
-import type { APIDeclaration } from '#@/types.js';
 
 const cachedFiles: Record<string, string> = {};
 
@@ -39,7 +39,8 @@ const argv = await yargs(process.argv.slice(2))
 
 const { outDir, cacheDir: cacheDirectory, wikiOriginEndpoint } = argv;
 
-const api: APIDeclaration = {};
+const apiBuilder = new APIBuilder({ outDir });
+const api = new API();
 
 const browser = await chromium.launch();
 
@@ -50,6 +51,8 @@ if (!hasCachedPages || argv.forceDownload) {
 }
 
 await scrapePages(browser, cachedFiles, wikiOriginEndpoint, api, cacheDirectory, outDir);
+
+console.log(api.serialize());
 
 await browser.close();
 

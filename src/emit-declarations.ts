@@ -5,8 +5,8 @@ import kebabCase from 'lodash/kebabCase.js';
 import { P, match } from 'ts-pattern';
 import { type Node, NodeFlags, SyntaxKind, addSyntheticLeadingComment, factory } from 'typescript';
 
+import type { APIBuilder } from '#@/api.js';
 import * as luaFactory from '#@/factory.js';
-import type { APIDeclaration } from '#@/types.js';
 import { printList } from '#@/utils.js';
 
 const {
@@ -35,7 +35,7 @@ function mapTypeNode(type: string) {
     .otherwise(() => createKeywordTypeNode(SyntaxKind.NumberKeyword));
 }
 
-export function emitDeclarations(api: APIDeclaration, outDir: string) {
+export function emitDeclarations(api: APIBuilder, outDir: string) {
   for (const ns in api) {
     const nodes: Node[] = [];
     const isGlobal = ns === 'core';
