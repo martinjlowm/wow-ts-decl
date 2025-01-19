@@ -112,7 +112,12 @@ export async function scrapePage({
     }),
   );
 
-  const events = (await Promise.all(eventTriggerLocators.map(async (locator) => locator.textContent())))
+  const [eventsText, patchChangesText] = await Promise.all([
+    Promise.all(eventTriggerLocators.map(async (locator) => locator.textContent())),
+    Promise.all(patchChangeLocators.map(async (locator) => locator.textContent())),
+  ]);
+
+  const events = eventsText
     .map((eventEntry) => {
       if (!eventEntry) {
         return null;
@@ -130,7 +135,7 @@ export async function scrapePage({
     })
     .filter(Boolean);
 
-  const since = (await Promise.all(patchChangeLocators.map(async (locator) => locator.textContent()))).find((t) => {
+  const since = patchChangesText.find((t) => {
     if (!t) {
       return false;
     }
@@ -178,7 +183,7 @@ export async function scrapePages(
 
   const page = await browser.newPage();
 
-  for (const subpage of subpages.splice(360, 40)) {
+  for (const subpage of subpages) {
     await visitPage(cachedFiles, page, origin, subpage);
 
     const pageTitleLocator = page.locator('h1').first();
