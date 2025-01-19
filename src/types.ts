@@ -5,7 +5,10 @@ const variableSignatureSchema = z.object({
   name: z.string(),
   description: z.string().default(''),
   type: z.string(),
-  nilable: z.boolean(),
+  mixin: z.string().optional(),
+  default: z.string().or(z.boolean()).or(z.number()).optional(),
+  strideIndex: z.number().optional(),
+  nilable: z.boolean().default(false),
 });
 
 export type VariableSignature = z.infer<typeof variableSignatureSchema>;
@@ -39,9 +42,9 @@ const functionSchema = z
   .object({
     name: z.string(),
     description: z.string().optional(),
-    parameters: z.array(variableSignatureSchema),
-    returns: z.array(variableSignatureSchema),
-    events: z.array(listItemDescriptionSchema),
+    parameters: z.array(variableSignatureSchema).default([]),
+    returns: z.array(variableSignatureSchema).default([]),
+    events: z.array(listItemDescriptionSchema).default([]),
   })
   .merge(versionedSchema)
   .merge(namespacedSchema);
@@ -51,7 +54,12 @@ export type FunctionSignature = z.infer<typeof functionSchema>;
 const tableSchema = z
   .object({
     name: z.string(),
-    fields: z.array(variableSignatureSchema),
+    type: z.string(),
+    // NOTE: There is some weird table defined in UITimer that looks like a
+    // (callback) function and not a table
+    parameters: z.array(variableSignatureSchema).default([]),
+    values: z.array(variableSignatureSchema).default([]),
+    fields: z.array(variableSignatureSchema).default([]),
   })
   .merge(versionedSchema)
   .merge(namespacedSchema);
@@ -62,7 +70,7 @@ const eventSchema = z
   .object({
     name: z.string(),
     literalName: z.string(),
-    payload: z.array(variableSignatureSchema),
+    payload: z.array(variableSignatureSchema).default([]),
   })
   .merge(versionedSchema)
   .merge(namespacedSchema);

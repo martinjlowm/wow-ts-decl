@@ -1,13 +1,12 @@
 #!/usr/bin/env node --experimental-transform-types --conditions development
 
-import { readFileSync, writeFileSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 
-import { SemVer } from 'semver';
+import { SemVer, valid } from 'semver';
 import yargs from 'yargs';
 
-import { API, APIBuilder, APIEvent, APIFunction } from '#@/api.js';
-import { WikiScraper } from '#@/wiki-scraper.js';
+import { API, APIBuilder } from '#@/api.js';
 
 const argv = await yargs(process.argv.slice(2))
   .scriptName(basename(import.meta.filename))
@@ -34,7 +33,7 @@ const argv = await yargs(process.argv.slice(2))
 const { inDir, outDir, semver } = argv;
 
 const files = readdirSync(inDir).filter((file) => file.endsWith('.json'));
-const apiBuilder = new APIBuilder();
+const apiBuilder = new APIBuilder({ outDir });
 
 const validVersions = semver.filter((v) => valid(v));
 
@@ -42,13 +41,23 @@ console.info('Building for:', validVersions.join(', '));
 
 for (const version of validVersions) {
   for (const file of files) {
-    const api = API.load(readFileSync(join(inDir, file)).toString());
-    const filteredAPI = api.filterForVersion(new SemVer(version));
-    apiBuilder.add(filteredAPI);
+    try {
+      const api = API.load(readFileSync(join(inDir, file)).toString());
+      const filteredAPI = api.filterForVersion(new SemVer(version));
+      apiBuilder.add(filteredAPI);
+    } catch (error) {
+      console.error(error.message);
+      console.log(join(inDir, file));
+    }
+    break;
   }
 }
 
 const api = apiBuilder.merge();
+if (!api) {
+  console.error('Failed to merge APIs');
+  process.exit(1);
+}
 // TODO: Emit declarations in a tree within dist
 
 const output = resolve(outDir, 'merged.json');

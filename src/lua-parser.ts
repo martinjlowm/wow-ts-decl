@@ -1,8 +1,10 @@
 import type luaparse from 'luaparse';
-import { match } from 'ts-pattern';
+import { P, match } from 'ts-pattern';
 import { SyntaxKind, factory } from 'typescript';
 
 import camelCase from 'lodash/camelCase.js';
+import capitalize from 'lodash/capitalize.js';
+import type { TableValue } from 'luaparse';
 import type {
   EventSignature,
   FileAPIDocumentation,
@@ -12,7 +14,7 @@ import type {
 } from '#@/types.js';
 import { printList, unhandledBranch } from '#@/utils.js';
 
-const { createKeywordTypeNode } = factory;
+const { createKeywordTypeNode, createEnumDeclaration } = factory;
 
 const visitedTypes = new Set<string>();
 
@@ -20,10 +22,74 @@ type TableField = luaparse.TableValue & {
   value: luaparse.TableConstructorExpression;
 };
 
+// NOTE: Since we process one file at a time, it's possible that these tables
+// haven't been processed
+// TODO: Flatten all the files, process tables first to account for this list
+// ahead of time
+const passthroughTypes = [
+  'AddPrivateAuraAnchorArgs',
+  'AuraData',
+  'CallbackType',
+  'ClubId',
+  'ClubStreamId',
+  'FramePoint',
+  'ItemInfo',
+  'ModelSceneFrame',
+  'ModelSceneFrameActor',
+  'PlayerLocation',
+  'PrivateAuraIconInfo',
+  'ScriptRegion',
+  'SimpleFrame',
+  'SimpleTexture',
+  'TimerCallback',
+  'TransmogCollectionType',
+  'TransmogLocation',
+  'TransmogPendingInfo',
+  'TransmogSearchType',
+  'UIWidgetCurrencyInfo',
+  'UIWidgetVisualizationType',
+  'UnitAuraUpdateInfo',
+  'UnitPrivateAuraAppliedSoundInfo',
+  'UnitToken',
+  'VoiceChatMember',
+  // Tables may be used for storing constants (ideally, we should branch based
+  // on that knowledge and handle it differently to regular tables)
+  'Constants',
+] as const;
+
+function explicitlyMapType(parsedType: string) {
+  return match(parsedType)
+    .with('cstring', 'textureAtlas', () => printList([createKeywordTypeNode(SyntaxKind.StringKeyword)]).trim())
+    .with('bool', () => printList([createKeywordTypeNode(SyntaxKind.BooleanKeyword)]).trim())
+    .with('XMLTemplateKeyValue', 'Structure', 'table', () =>
+      printList([createKeywordTypeNode(SyntaxKind.ObjectKeyword)]).trim(),
+    )
+    .with('Enumeration', () => printList([createEnumDeclaration(undefined, '', [])]).trim())
+    .with('WOWGUID', () => 'GUID')
+    .with(P.string.startsWith('vector'), P.string.startsWith('colorRGB'), 'textureKit', (v) => capitalize(v))
+    .with('fileID', () => 'FileId')
+    .with('uiUnit', () => 'UIUnit')
+    .with('time_t', () => 'Date')
+    .with('string', 'number', ...passthroughTypes, (t) => t)
+    .with('luaIndex', () => 'LuaIndex')
+    .otherwise((t) => {
+      if (!visitedTypes.has(t)) {
+        console.warn("Found a type that wasn't explicitly mapped", t);
+      }
+
+      return t;
+    });
+}
+
 export function toAPIDefinition(apiDefinition: Partial<FileAPIDocumentation>, field: luaparse.TableKeyString) {
   switch (true) {
     case isName(field): {
       apiDefinition.name = JSON.parse(field.value.raw);
+      break;
+    }
+    case isType(field): {
+      // Don't care
+      // func.type = JSON.parse(field.value.raw);
       break;
     }
     case isNamespace(field): {
@@ -65,6 +131,13 @@ export function toFunction(func: FunctionSignature, field: luaparse.TableKeyStri
       func.name = JSON.parse(field.value.raw);
       break;
     }
+    case isDocumentation(field): {
+      func.description = field.value.fields
+        .filter(isTableValue)
+        .map((v) => JSON.parse(v.value.raw))
+        .join('\n');
+      break;
+    }
     case isType(field): {
       // Don't care
       // func.type = JSON.parse(field.value.raw);
@@ -94,6 +167,27 @@ export function toTable(table: TableSignature, field: luaparse.TableKeyString) {
       visitedTypes.add(table.name);
       break;
     }
+    case isEnumRange(field): {
+      // Don't care
+      // event.type = JSON.parse(field.value.raw);
+      break;
+    }
+    case isParameters(field): {
+      // NOTE: See the comment for the table schema - not sure what the meaning
+      // of this is - perhaps a wrongly categorized entry
+      table.parameters = field.value.fields.filter(isTableField).map(toProperty);
+      break;
+    }
+    case isValues(field): {
+      // NOTE: Tables are also used for storing constants - we should probably
+      // store these separately...
+      table.values = field.value.fields.filter(isTableField).map(toProperty);
+      break;
+    }
+    case isType(field): {
+      table.type = explicitlyMapType(JSON.parse(field.value.raw));
+      break;
+    }
     case isFields(field): {
       table.fields = field.value.fields.filter(isTableField).map(toProperty);
       break;
@@ -120,7 +214,7 @@ export function toEvent(event: EventSignature, field: luaparse.TableKeyString) {
       // event.type = JSON.parse(field.value.raw);
       break;
     }
-    case isFields(field): {
+    case isPayload(field): {
       event.payload = field.value.fields.filter(isTableField).map(toProperty);
       break;
     }
@@ -137,26 +231,35 @@ export function toVariableSignature(signature: VariableSignature, field: luapars
       signature.name = camelCase(JSON.parse(field.value.raw)).replace('Afk', 'AFK');
       break;
     }
+    case isDefault(field): {
+      signature.default = field.value.value || JSON.parse(field.value.raw);
+      break;
+    }
     case isType(field): {
-      const type = JSON.parse(field.value.raw);
-      const convertedType = match(type)
-        .with('cstring', () => printList([createKeywordTypeNode(SyntaxKind.StringKeyword)]).trim())
-        .with('bool', () => printList([createKeywordTypeNode(SyntaxKind.BooleanKeyword)]).trim())
-        .with('table', () => printList([createKeywordTypeNode(SyntaxKind.ObjectKeyword)]).trim())
-        .with('number', (t) => t)
-        .otherwise((t) => {
-          if (!visitedTypes.has(t)) {
-            console.warn("Found a type that wasn't mapped", t);
-          }
-
-          return t;
-        });
-
-      signature.type = convertedType;
+      signature.type = explicitlyMapType(JSON.parse(field.value.raw));
+      break;
+    }
+    case isMixin(field): {
+      signature.mixin = JSON.parse(field.value.raw);
+      break;
+    }
+    case isStrideIndex(field): {
+      signature.strideIndex = JSON.parse(field.value.raw);
+      break;
+    }
+    case isDocumentation(field): {
+      signature.description = field.value.fields
+        .filter(isTableValue)
+        .map((v) => JSON.parse(v.value.raw))
+        .join('\n');
       break;
     }
     case isNilable(field): {
       signature.nilable = field.value.value;
+      break;
+    }
+    case isEnumValue(field): {
+      // Don't care
       break;
     }
     default:
@@ -184,8 +287,48 @@ export function isLiteralName(
 export function isType(
   field: luaparse.TableKeyString,
 ): field is luaparse.TableKeyString & { value: luaparse.StringLiteral } {
-  return field.key.name === 'Type' && field.value.type === 'StringLiteral';
+  return (field.key.name === 'Type' || field.key.name === 'InnerType') && field.value.type === 'StringLiteral';
 }
+export function isDocumentation(
+  field: luaparse.TableKeyString,
+): field is luaparse.TableKeyString & { value: luaparse.TableConstructorExpression } {
+  return field.key.name === 'Documentation' && field.value.type === 'TableConstructorExpression';
+}
+export function isEnumValue(field: luaparse.TableKeyString): field is luaparse.TableKeyString {
+  return field.key.name === 'EnumValue';
+}
+export function isEnumRange(
+  field: luaparse.TableKeyString,
+): field is luaparse.TableKeyString & { value: luaparse.NumericLiteral } {
+  return (
+    ['MinValue', 'MaxValue', 'NumValues'].some((k) => k === field.key.name) &&
+    (field.value.type === 'NumericLiteral' || field.value.type === 'UnaryExpression')
+  );
+}
+
+export function isMixin(
+  field: luaparse.TableKeyString,
+): field is luaparse.TableKeyString & { value: luaparse.StringLiteral } {
+  return field.key.name === 'Mixin' && field.value.type === 'StringLiteral';
+}
+
+export function isStrideIndex(
+  field: luaparse.TableKeyString,
+): field is luaparse.TableKeyString & { value: luaparse.NumericLiteral } {
+  return field.key.name === 'StrideIndex' && field.value.type === 'NumericLiteral';
+}
+
+export function isDefault(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
+  value: luaparse.StringLiteral | luaparse.NumericLiteral | luaparse.BooleanLiteral;
+} {
+  return (
+    field.key.name === 'Default' &&
+    (field.value.type === 'StringLiteral' ||
+      field.value.type === 'NumericLiteral' ||
+      field.value.type === 'BooleanLiteral')
+  );
+}
+
 export function isNilable(
   field: luaparse.TableKeyString,
 ): field is luaparse.TableKeyString & { value: luaparse.BooleanLiteral } {
@@ -202,6 +345,11 @@ export function isFields(
   field: luaparse.TableKeyString,
 ): field is luaparse.TableKeyString & { value: luaparse.TableConstructorExpression } {
   return field.key.name === 'Fields' && field.value.type === 'TableConstructorExpression';
+}
+export function isPayload(
+  field: luaparse.TableKeyString,
+): field is luaparse.TableKeyString & { value: luaparse.TableConstructorExpression } {
+  return field.key.name === 'Payload' && field.value.type === 'TableConstructorExpression';
 }
 
 export function isFunctionList(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
@@ -228,11 +376,26 @@ export function isTableField(
   return field.type === 'TableValue' && field.value.type === 'TableConstructorExpression';
 }
 
+export function isTableValue(
+  field: luaparse.TableKey | luaparse.TableKeyString | luaparse.TableValue,
+): field is TableValue & {
+  value: luaparse.StringLiteral;
+} {
+  return field.type === 'TableValue' && field.value.type === 'StringLiteral';
+}
+
 export function isParameters(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
   value: luaparse.TableConstructorExpression;
 } {
   return field.key.name === 'Arguments' && field.value.type === 'TableConstructorExpression';
 }
+
+export function isValues(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
+  value: luaparse.TableConstructorExpression;
+} {
+  return field.key.name === 'Values' && field.value.type === 'TableConstructorExpression';
+}
+
 export function isReturns(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
   value: luaparse.TableConstructorExpression;
 } {

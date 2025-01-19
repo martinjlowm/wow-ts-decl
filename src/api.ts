@@ -293,6 +293,10 @@ export class APIBuilder {
   }
 
   merge() {
+    if (!this.apis.length) {
+      return null;
+    }
+
     return this.apis.reduce((combinedAPI, api) => combinedAPI.combine(api));
   }
 }
