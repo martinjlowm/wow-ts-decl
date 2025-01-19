@@ -56,7 +56,7 @@ const tableSchema = z
   .object({
     name: z.string(),
     description: z.string().default(''),
-    type: z.string(),
+    type: z.string().default('object'),
     // NOTE: There is some weird table defined in UITimer that looks like a
     // (callback) function and not a table
     parameters: z.array(variableSignatureSchema).default([]),

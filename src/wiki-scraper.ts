@@ -10,6 +10,17 @@ import type { EventSignature, FunctionSignature, VariableSignature } from '#@/ty
 import { Duration } from '#@/units.js';
 import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringByPeriod } from '#@/utils.js';
 
+const overrides = {
+  // CloseAllBags redirects to OpenAllBags where it and two other functions are
+  // listed in a bullet list
+  CloseAllBags: {
+    pageTitleSelector: '.mw-parser-output > ul:first-of-type > li:nth-child(2)',
+    pageTitleFormat: (str: string | undefined) => str?.split('()')[0],
+    descriptionSelector: '> ul:first-of-type > li:nth-child(2)',
+    descriptionFormat: (str: string | undefined) => str?.split(' ').slice(1).join(' '),
+  },
+};
+
 type WikiScraperInput = {
   cacheDirectory: string;
   origin: string;
@@ -133,10 +144,19 @@ export class WikiScraper {
   async scrapeFunctionPage(page: Page, resource: string) {
     await this.visitPage(page, resource);
 
-    const pageTitleLocator = page.locator('h1').first();
+    const pageTitleSelector = match(resource)
+      .with(P.string.includes('CloseAllBags'), () => overrides.CloseAllBags.pageTitleSelector)
+      .otherwise(() => 'h1');
+
+    const pageTitleLocator = page.locator(pageTitleSelector).first();
+
     const pageBody = page.locator('//div[@id="mw-content-text"]/div[@class="mw-parser-output"]');
 
-    const descriptionLocator = pageBody.locator('> p:first-of-type');
+    const descriptionSelector = match(resource)
+      .with(P.string.includes('CloseAllBags'), () => overrides.CloseAllBags.descriptionSelector)
+      .otherwise(() => '> p:first-of-type');
+
+    const descriptionLocator = pageBody.locator(descriptionSelector);
 
     const parametersHeaderLocator = pageBody.locator('h2:has(> #Arguments)');
     const returnsHeaderLocator = pageBody.locator('h2:has(> #Returns)');
@@ -145,8 +165,16 @@ export class WikiScraper {
 
     const [pageTitle, description, parameterLocators, returnLocators, eventTriggerLocators, patchChangeLocators] =
       await Promise.all([
-        pageTitleLocator.textContent().then((content) => content?.trim()),
-        descriptionLocator.textContent().then((content) => content?.trim()),
+        pageTitleLocator.textContent({ timeout: Duration.fromSeconds(5).asMillis() }).then((content) =>
+          match(content)
+            .with(P.string.includes('CloseAllBags'), overrides.CloseAllBags.pageTitleFormat)
+            .otherwise(() => content?.trim()),
+        ),
+        descriptionLocator.textContent().then((content) =>
+          match(content)
+            .with(P.string.includes('CloseAllBags'), overrides.CloseAllBags.descriptionFormat)
+            .otherwise(() => content?.trim()),
+        ),
         parametersHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
         returnsHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
         eventTriggersHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
@@ -154,13 +182,7 @@ export class WikiScraper {
       ] as const);
 
     if (!pageTitle || !description) {
-      console.log('Skipped', resource);
-
-      // SPecial handling for
-      // match(pageTitle)
-      //   .with('SPECIAL', ()=> {
-      //   });
-      return;
+      throw new Error('Needs special handling');
     }
 
     return extractFunction({
