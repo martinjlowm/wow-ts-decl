@@ -2,6 +2,7 @@ import type luaparse from 'luaparse';
 import { match } from 'ts-pattern';
 import { SyntaxKind, factory } from 'typescript';
 
+import camelCase from 'lodash/camelCase.js';
 import type {
   EventSignature,
   FileAPIDocumentation,
@@ -133,7 +134,7 @@ export function toEvent(event: EventSignature, field: luaparse.TableKeyString) {
 export function toVariableSignature(signature: VariableSignature, field: luaparse.TableKeyString) {
   switch (true) {
     case isName(field): {
-      signature.name = JSON.parse(field.value.raw);
+      signature.name = camelCase(JSON.parse(field.value.raw)).replace('Afk', 'AFK');
       break;
     }
     case isType(field): {

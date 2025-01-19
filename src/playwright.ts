@@ -4,7 +4,6 @@ import { dirname, join } from 'node:path';
 
 import camelCase from 'lodash/camelCase.js';
 import type { Browser, Locator, Page } from 'playwright';
-import { Range } from 'semver';
 import { match } from 'ts-pattern';
 
 import { type API, APIFunction } from '#@/api.js';

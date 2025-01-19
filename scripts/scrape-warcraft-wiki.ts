@@ -1,11 +1,12 @@
 #!/usr/bin/env node --experimental-transform-types --conditions development
 
-import { basename } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { basename, resolve } from 'node:path';
 
 import { chromium } from 'playwright';
 import yargs from 'yargs';
 
-import { API, APIBuilder } from '#@/api.js';
+import { API } from '#@/api.js';
 import { cachePage, listPages, resourceReference, scrapePages, visitPage } from '#@/playwright.js';
 
 const cachedFiles: Record<string, string> = {};
@@ -24,7 +25,7 @@ const argv = await yargs(process.argv.slice(2))
     type: 'string',
   })
   .option('out-dir', {
-    describe: 'Directory to emit intermediate documentation',
+    describe: 'Directory to emit output',
     default: 'dist',
     type: 'string',
   })
@@ -39,7 +40,6 @@ const argv = await yargs(process.argv.slice(2))
 
 const { outDir, cacheDir: cacheDirectory, wikiOriginEndpoint } = argv;
 
-const apiBuilder = new APIBuilder({ outDir });
 const api = new API();
 
 const browser = await chromium.launch();
@@ -51,6 +51,9 @@ if (!hasCachedPages || argv.forceDownload) {
 }
 
 await scrapePages(browser, cachedFiles, wikiOriginEndpoint, api, cacheDirectory, outDir);
+
+const output = resolve(outDir, 'wiki.json');
+writeFileSync(output, api.serialize());
 
 await browser.close();
 

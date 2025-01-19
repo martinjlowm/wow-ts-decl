@@ -2,8 +2,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
-import path from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 import luaparse from 'luaparse';
 import { SemVer, valid } from 'semver';
@@ -23,6 +22,16 @@ const argv = await yargs(process.argv.slice(2))
     type: 'string',
     array: true,
   })
+  .option('cache-dir', {
+    describe: 'Directory to cache visited pages',
+    default: '.cache',
+    type: 'string',
+  })
+  .option('out-dir', {
+    describe: 'Directory to emit output',
+    default: 'dist',
+    type: 'string',
+  })
   .option('repository', {
     describe: 'The repository with documentation to scrape',
     default: 'https://github.com/Gethe/wow-ui-source',
@@ -32,16 +41,14 @@ const argv = await yargs(process.argv.slice(2))
   .usage('$0 [semver..]')
   .help().argv;
 
-const { semver, repository } = argv;
+const { semver, cacheDir, outDir, repository } = argv;
 
-const temporaryDirectory = '.tmp';
-
-if (!existsSync(temporaryDirectory)) {
-  mkdirSync(temporaryDirectory);
+if (!existsSync(cacheDir)) {
+  mkdirSync(cacheDir);
 }
 
-const tmpPath = path.resolve(process.cwd(), temporaryDirectory);
-const repositoryDirectory = path.resolve(tmpPath, basename(repository));
+const tmpPath = resolve(process.cwd(), cacheDir);
+const repositoryDirectory = resolve(tmpPath, basename(repository));
 
 if (!existsSync(repositoryDirectory)) {
   spawnSync('git', ['clone', repository], { cwd: tmpPath, stdio: 'inherit' });
@@ -54,14 +61,14 @@ console.info('Scraping:', validVersions.join(', '));
 for (const version of validVersions) {
   spawnSync('git', ['checkout', version], { cwd: repositoryDirectory, stdio: 'inherit' });
 
-  const documentationPath = path.join(repositoryDirectory, 'Interface', 'AddOns', 'Blizzard_APIDocumentationGenerated');
+  const documentationPath = join(repositoryDirectory, 'Interface', 'AddOns', 'Blizzard_APIDocumentationGenerated');
 
   const files = readdirSync(documentationPath).filter((file) => file.endsWith('.lua'));
 
   const api = new API();
 
   for (const file of files) {
-    const fileContents = readFileSync(path.join(documentationPath, file)).toString();
+    const fileContents = readFileSync(join(documentationPath, file)).toString();
     const ast = luaparse.parse(fileContents);
 
     const definitionTable = ast.body.find((node) => node.type === 'LocalStatement');
@@ -103,6 +110,6 @@ for (const version of validVersions) {
     }
   }
 
-  const output = path.resolve(temporaryDirectory, `${version}.json`);
+  const output = resolve(outDir, `wow-ui-source-${version}.json`);
   writeFileSync(output, api.serialize());
 }
