@@ -1,4 +1,4 @@
-# Install direnv, nix-direnv and cachix
+# Install direnv and nix-direnv
 nix profile install -f '<nixpkgs>' direnv nix-direnv
 
 # Enable nix-direnv's caching capabilities for direnv
