@@ -1,11 +1,11 @@
 {
   "exclude": ["test/*"],
   "compilerOptions": {
-    "target": "es2022",
+    "target": "esnext",
     "module": "node16",
     "moduleResolution": "node16",
     "types": ["node", "extensions"],
-    "lib": ["es2022"],
+    "lib": ["esnext"],
     "customConditions": ["development"],
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,

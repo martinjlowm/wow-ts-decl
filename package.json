@@ -46,7 +46,7 @@
     "@types/jest": "^29.5.14",
     "@types/lodash": "^4.17.14",
     "@types/luaparse": "^0.2.12",
-    "@types/node": "^22.10.6",
+    "@types/node": "^22.10.7",
     "@types/semver": "^7",
     "@types/yargs": "^17.0.33",
     "@typescript-to-lua/language-extensions": "^1.19.0",

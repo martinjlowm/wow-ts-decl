@@ -9,7 +9,7 @@ import { SemVer, valid } from 'semver';
 import yargs from 'yargs';
 
 import { API, APIEvent, APIFunction, APITable } from '#@/api.js';
-import { isKeyValueField, toAPIDefinition } from '#@/lua-parser.js';
+import { isKeyValueField, toAPIDefinition, typesMaybeNotAccountedFor, visitedTypes } from '#@/lua-parser.js';
 import type { FileAPIDocumentation } from '#@/types.js';
 
 const argv = await yargs(process.argv.slice(2))
@@ -111,4 +111,9 @@ for (const version of validVersions) {
 
   const output = resolve(outDir, `wow-ui-source-${version}.json`);
   writeFileSync(output, api.serialize());
+}
+
+const notAccountedFor = typesMaybeNotAccountedFor.difference(visitedTypes);
+if (notAccountedFor.size) {
+  console.warn('The following types were not accounted for:', notAccountedFor.values().toArray().join(', '));
 }

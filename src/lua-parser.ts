@@ -16,45 +16,112 @@ import { printList, unhandledBranch } from '#@/utils.js';
 
 const { createKeywordTypeNode, createEnumDeclaration } = factory;
 
-const visitedTypes = new Set<string>();
+export const visitedTypes = new Set<string>();
+export const typesMaybeNotAccountedFor = new Set<string>();
 
 type TableField = luaparse.TableValue & {
   value: luaparse.TableConstructorExpression;
 };
 
-// NOTE: Since we process one file at a time, it's possible that these tables
-// haven't been processed
-// TODO: Flatten all the files, process tables first to account for this list
-// ahead of time
-const passthroughTypes = [
-  'AddPrivateAuraAnchorArgs',
-  'AuraData',
-  'CallbackType',
-  'ClubId',
-  'ClubStreamId',
-  'FramePoint',
+const explicitlyPassthroughTypes = [
+  // 11.0.7
+  'AccountStoreCategoryType',
+  'AccountStoreItemStatus',
+  'AccountStoreItemFlag',
+  'AccountStoreState',
+  'ArtifactTiers',
+  'stringView',
+  'GarrisonFollower',
+  'ItemCreationContext',
+  'mouseButton',
+  'LuaValueVariant',
+  'PartyPlaylistEntry',
+  'UiMapPoint',
+  'RecruitAcceptanceID',
+  'TooltipData',
+  'WeeklyRewardItemDBID',
+  'InventorySlots',
+  'WeeklyRewardChestThresholdType',
+  'CachedRewardType',
+
+  // 1.15.4
+  'AzeriteEmpoweredItemLocation',
   'ItemInfo',
-  'ModelSceneFrame',
-  'ModelSceneFrameActor',
+  'ItemLocation',
+  'AzeriteItemLocation',
+  'NotificationDbId',
+  'Constants',
+  'CalendarEventID',
+  'ClubId',
+  'ChatBubbleFrame',
   'PlayerLocation',
-  'PrivateAuraIconInfo',
+  'BigUInteger',
+  'ClubInvitationId',
+  'kstringClubMessage',
+  'ClubStreamId',
+  'BigInteger',
+  'UnitToken',
+  'ConnectionIptype',
+  'WOWMONEY',
+  'FramePoint',
+  'FileAsset',
+  'AnimationDataEnum',
+  'SingleColorValue',
+  'IDOrLink',
+  'DrawLayer',
+  'uiRect',
+  'TextureAssetDisk',
+  'SimpleWindow',
+  'GameMode',
+  'GameRule',
   'ScriptRegion',
+  'EmptiableItemLocation',
+  'ItemTransmogInfo',
+  'kstringLfgListApplicant',
+  'kstringLfgListSearch',
+  'kstringLfgListChat',
+  'TextureAsset',
+  'NamePlateFrame',
   'SimpleFrame',
-  'SimpleTexture',
-  'TimerCallback',
-  'TransmogCollectionType',
+  'RoleShortageReward',
+  'ReportInfo',
+  'CScriptObject',
+  'luaFunction',
+  'SmoothingType',
+  'SimpleAnimGroup',
+  'SimpleAnim',
+  'LoopType',
+  'SimpleControlPoint',
+  'CurveType',
+  'SimpleButtonStateToken',
+  'SimpleFont',
+  'SimpleFontString',
+  'BlendMode',
+  'SimplePathAnim',
+  'TBFFlags',
+  'JustifyHorizontal',
+  'JustifyVertical',
+  'uiFontHeight',
+  'SimpleLine',
+  'SimpleMaskTexture',
+  'FrameStrata',
+  'HTMLTextType',
+  'InsertMode',
+  'ModelAsset',
+  'Orientation',
+  'StatusBarFillStyle',
+  'normalizedValue',
+  'size',
+  'FilterMode',
+  'ItemSoundType',
+  'SpellIdentifier',
+  'CallbackType',
+  'TooltipComparisonItem',
   'TransmogLocation',
   'TransmogPendingInfo',
-  'TransmogSearchType',
-  'UIWidgetCurrencyInfo',
-  'UIWidgetVisualizationType',
-  'UnitAuraUpdateInfo',
-  'UnitPrivateAuraAppliedSoundInfo',
-  'UnitToken',
-  'VoiceChatMember',
-  // Tables may be used for storing constants (ideally, we should branch based
-  // on that knowledge and handle it differently to regular tables)
-  'Constants',
+  'ModelSceneFrame',
+  'ModelSceneFrameActor',
+  'AuraData',
 ] as const;
 
 function explicitlyMapType(parsedType: string) {
@@ -68,13 +135,15 @@ function explicitlyMapType(parsedType: string) {
     .with('WOWGUID', () => 'GUID')
     .with(P.string.startsWith('vector'), P.string.startsWith('colorRGB'), 'textureKit', (v) => capitalize(v))
     .with('fileID', () => 'FileId')
+    .with('Vocalerrorsounds', () => 'VocalErrorSounds')
     .with('uiUnit', () => 'UIUnit')
+    .with('uiAddon', () => 'UIAddon')
     .with('time_t', () => 'Date')
-    .with('string', 'number', ...passthroughTypes, (t) => t)
+    .with('string', 'number', 'SimpleTexture', ...explicitlyPassthroughTypes, (t) => t)
     .with('luaIndex', () => 'LuaIndex')
     .otherwise((t) => {
       if (!visitedTypes.has(t)) {
-        console.warn("Found a type that wasn't explicitly mapped", t);
+        typesMaybeNotAccountedFor.add(t);
       }
 
       return t;
@@ -94,6 +163,10 @@ export function toAPIDefinition(apiDefinition: Partial<FileAPIDocumentation>, fi
     }
     case isNamespace(field): {
       apiDefinition.ns = JSON.parse(field.value.raw);
+      break;
+    }
+    case isDocumentation(field): {
+      // There's some Pony documentation :shrug:
       break;
     }
     case isFunctionList(field): {
@@ -172,6 +245,13 @@ export function toTable(table: TableSignature, field: luaparse.TableKeyString) {
       // event.type = JSON.parse(field.value.raw);
       break;
     }
+    case isDocumentation(field): {
+      table.description = field.value.fields
+        .filter(isTableValue)
+        .map((v) => JSON.parse(v.value.raw))
+        .join('\n');
+      break;
+    }
     case isParameters(field): {
       // NOTE: See the comment for the table schema - not sure what the meaning
       // of this is - perhaps a wrongly categorized entry
@@ -214,6 +294,13 @@ export function toEvent(event: EventSignature, field: luaparse.TableKeyString) {
       // event.type = JSON.parse(field.value.raw);
       break;
     }
+    case isDocumentation(field): {
+      event.description = field.value.fields
+        .filter(isTableValue)
+        .map((v) => JSON.parse(v.value.raw))
+        .join('\n');
+      break;
+    }
     case isPayload(field): {
       event.payload = field.value.fields.filter(isTableField).map(toProperty);
       break;
@@ -232,7 +319,14 @@ export function toVariableSignature(signature: VariableSignature, field: luapars
       break;
     }
     case isDefault(field): {
-      signature.default = field.value.value || JSON.parse(field.value.raw);
+      if (field.value.type !== 'UnaryExpression') {
+        signature.default = field.value.value || JSON.parse(field.value.raw);
+      }
+      break;
+    }
+    case isValue(field): {
+      // This needs proper parsing... it can be a UnaryExpression - skip it for now...
+      // A value can also be a constant reference - not supported for now
       break;
     }
     case isType(field): {
@@ -319,13 +413,36 @@ export function isStrideIndex(
 }
 
 export function isDefault(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
-  value: luaparse.StringLiteral | luaparse.NumericLiteral | luaparse.BooleanLiteral;
+  value: luaparse.StringLiteral | luaparse.NumericLiteral | luaparse.BooleanLiteral | luaparse.UnaryExpression;
 } {
   return (
     field.key.name === 'Default' &&
     (field.value.type === 'StringLiteral' ||
       field.value.type === 'NumericLiteral' ||
-      field.value.type === 'BooleanLiteral')
+      field.value.type === 'BooleanLiteral' ||
+      field.value.type === 'UnaryExpression')
+  );
+}
+
+export function isValue(field: luaparse.TableKeyString): field is luaparse.TableKeyString & {
+  value:
+    | luaparse.StringLiteral
+    | luaparse.NumericLiteral
+    | luaparse.BooleanLiteral
+    | luaparse.UnaryExpression
+    | luaparse.MemberExpression
+    | luaparse.Identifier
+    | luaparse.BinaryExpression;
+} {
+  return (
+    field.key.name === 'Value' &&
+    (field.value.type === 'StringLiteral' ||
+      field.value.type === 'NumericLiteral' ||
+      field.value.type === 'BooleanLiteral' ||
+      field.value.type === 'UnaryExpression' ||
+      field.value.type === 'MemberExpression' ||
+      field.value.type === 'BinaryExpression' ||
+      field.value.type === 'Identifier')
   );
 }
 

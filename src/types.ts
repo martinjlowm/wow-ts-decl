@@ -7,6 +7,7 @@ const variableSignatureSchema = z.object({
   type: z.string(),
   mixin: z.string().optional(),
   default: z.string().or(z.boolean()).or(z.number()).optional(),
+  value: z.string().or(z.boolean()).or(z.number()).optional(),
   strideIndex: z.number().optional(),
   nilable: z.boolean().default(false),
 });
@@ -54,6 +55,7 @@ export type FunctionSignature = z.infer<typeof functionSchema>;
 const tableSchema = z
   .object({
     name: z.string(),
+    description: z.string().default(''),
     type: z.string(),
     // NOTE: There is some weird table defined in UITimer that looks like a
     // (callback) function and not a table
@@ -69,6 +71,7 @@ export type TableSignature = z.infer<typeof tableSchema>;
 const eventSchema = z
   .object({
     name: z.string(),
+    description: z.string().default(''),
     literalName: z.string(),
     payload: z.array(variableSignatureSchema).default([]),
   })
