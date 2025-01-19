@@ -52,9 +52,6 @@ if (!hasCachedPages || argv.forceDownload) {
 
 await scrapePages(browser, cachedFiles, wikiOriginEndpoint, api, cacheDirectory, outDir);
 
-console.log(api.serialize());
-console.log(API.load(api.serialize()));
-
 await browser.close();
 
 async function downloadPages() {

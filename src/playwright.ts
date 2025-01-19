@@ -199,7 +199,7 @@ export async function scrapePages(
 
   const page = await browser.newPage();
 
-  for (const subpage of subpages.splice(0, 10)) {
+  for (const subpage of subpages) {
     await visitPage(cacheDirectory, cachedFiles, page, origin, subpage);
 
     const pageTitleLocator = page.locator('h1').first();

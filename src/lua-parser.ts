@@ -139,9 +139,9 @@ export function toVariableSignature(signature: VariableSignature, field: luapars
     case isType(field): {
       const type = JSON.parse(field.value.raw);
       const convertedType = match(type)
-        .with('cstring', () => printList([createKeywordTypeNode(SyntaxKind.StringKeyword)]))
-        .with('bool', () => printList([createKeywordTypeNode(SyntaxKind.BooleanKeyword)]))
-        .with('table', () => printList([createKeywordTypeNode(SyntaxKind.ObjectKeyword)]))
+        .with('cstring', () => printList([createKeywordTypeNode(SyntaxKind.StringKeyword)]).trim())
+        .with('bool', () => printList([createKeywordTypeNode(SyntaxKind.BooleanKeyword)]).trim())
+        .with('table', () => printList([createKeywordTypeNode(SyntaxKind.ObjectKeyword)]).trim())
         .with('number', (t) => t)
         .otherwise((t) => {
           if (!visitedTypes.has(t)) {
