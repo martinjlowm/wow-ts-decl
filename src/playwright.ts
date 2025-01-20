@@ -9,9 +9,21 @@ export class Selector {
       pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(2)',
       description: '> ul:first-of-type > li:nth-child(2)',
     },
+    API_OpenAllBags: {
+      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(1)',
+      description: '> ul:first-of-type > li:nth-child(1)',
+    },
+    API_OpenBackpack: {
+      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(1)',
+      description: '> ul:first-of-type > li:nth-child(1)',
+    },
     API_CloseBackpack: {
       pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(2)',
       description: '> ul:first-of-type > li:nth-child(2)',
+    },
+    API_OpenBag: {
+      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(1)',
+      description: '> ul:first-of-type > li:nth-child(1)',
     },
     API_CloseBag: {
       pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(2)',
@@ -28,6 +40,9 @@ export class Selector {
     },
     API_GetRepairAllCost: {
       description: '> h2:nth-of-type(2) ~ dl',
+    },
+    API_GetWorldElapsedTime: {
+      description: '> h2:nth-of-type(3) ~ ul',
     },
     // Example is above the snippet and there's a empty paragraph at the top of
     // the page :shrug:
