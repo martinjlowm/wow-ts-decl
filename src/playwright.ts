@@ -13,6 +13,13 @@ export class Selector {
       pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(2)',
       description: '> ul:first-of-type > li:nth-child(2)',
     },
+    API_CloseBag: {
+      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(2)',
+      description: '> ul:first-of-type > li:nth-child(2)',
+    },
+    API_GMRequestPlayerInfo: {
+      description: '> h2 ~ dl',
+    },
     // Example is above the snippet and there's a empty paragraph at the top of
     // the page :shrug:
     API_ChatFrame_AddChannel: {
@@ -64,6 +71,24 @@ export class Formatter {
       },
     },
     API_CloseBackpack: {
+      pageTitle: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [left] = str.split('()');
+        return left;
+      },
+      description: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [, ...rhs] = str.split(' ');
+        return rhs.join(' ');
+      },
+    },
+    API_CloseBag: {
       pageTitle: (str) => {
         if (!str) {
           return '';

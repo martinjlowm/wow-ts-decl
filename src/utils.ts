@@ -74,3 +74,7 @@ export function extractSemanticRange(since: string | undefined, until: string | 
 
   return new Range(range.join(' ') || '*');
 }
+
+export function trimExtension(str: string) {
+  return str.substring(0, str.lastIndexOf('.')) || str;
+}

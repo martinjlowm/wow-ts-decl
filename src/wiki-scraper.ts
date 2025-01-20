@@ -9,7 +9,7 @@ import { P, match } from 'ts-pattern';
 import { Formatter, Selector } from '#@/playwright.js';
 import type { EventSignature, FunctionSignature, VariableSignature } from '#@/types.js';
 import { Duration } from '#@/units.js';
-import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringOnceBy } from '#@/utils.js';
+import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringOnceBy, trimExtension } from '#@/utils.js';
 
 type WikiScraperInput = {
   cacheDirectory: string;
@@ -44,7 +44,7 @@ export class WikiScraper {
   }
 
   listPages() {
-    const pages = readdirSync(join(this.cacheDirectory, 'wiki')).map((p) => p.substring(0, p.lastIndexOf('.')));
+    const pages = readdirSync(join(this.cacheDirectory, 'wiki')).map(trimExtension);
 
     for (const page of pages) {
       const localFileURL = serializeLocalFileURL(this.cacheDirectory, page);
@@ -56,8 +56,7 @@ export class WikiScraper {
 
   resourceReference(path: string) {
     const page = this.cachedFiles[path] || `${this.origin}/wiki/${path}`;
-    const basenamePage = basename(page);
-    console.info(`Visiting: ${basenamePage.substring(0, basenamePage.lastIndexOf('.'))}`);
+    console.info(`Visiting: ${trimExtension(basename(page))}`);
     return page;
   }
 
