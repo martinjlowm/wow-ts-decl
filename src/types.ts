@@ -43,6 +43,7 @@ const functionSchema = z
   .object({
     name: z.string(),
     description: z.string().optional(),
+    iface: z.string().optional(),
     parameters: z.array(variableSignatureSchema).default([]),
     returns: z.array(variableSignatureSchema).default([]),
     events: z.array(listItemDescriptionSchema).default([]),

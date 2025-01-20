@@ -6,25 +6,10 @@ import camelCase from 'lodash/camelCase.js';
 import { type Browser, type Locator, type Page, chromium } from 'playwright';
 import { P, match } from 'ts-pattern';
 
+import { Formatter, Selector } from '#@/playwright.js';
 import type { EventSignature, FunctionSignature, VariableSignature } from '#@/types.js';
 import { Duration } from '#@/units.js';
-import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringByPeriodColon } from '#@/utils.js';
-
-const overrides = {
-  // CloseAllBags redirects to OpenAllBags where it and two other functions are
-  // listed in a bullet list
-  CloseAllBags: {
-    pageTitleSelector: '.mw-parser-output > ul:first-of-type > li:nth-child(2)',
-    pageTitleFormat: (str: string | undefined) => str?.split('()')[0],
-    descriptionSelector: '> ul:first-of-type > li:nth-child(2)',
-    descriptionFormat: (str: string | undefined) => str?.split(' ').slice(1).join(' '),
-  },
-  // Example is above the snippet and there's a empty paragraph at the top of
-  // the page :shrug:
-  ChatFrame_AddChannel: {
-    descriptionSelector: '> p:nth-of-type(2)',
-  },
-};
+import { extractSemanticRange, serializeLocalFileURL, sleep, splitStringOnceBy } from '#@/utils.js';
 
 type WikiScraperInput = {
   cacheDirectory: string;
@@ -38,6 +23,9 @@ export class WikiScraper {
 
   private browser?: Browser;
 
+  selector = new Selector();
+  formatter = new Formatter();
+
   constructor({ cacheDirectory, origin }: WikiScraperInput) {
     this.cachedFiles = {};
     this.cacheDirectory = cacheDirectory;
@@ -45,8 +33,10 @@ export class WikiScraper {
   }
 
   async init() {
-    this.browser ||= await chromium.launch();
-    return this.browser;
+    this.browser ||= await chromium.launch({
+      args: ['--disable-gl-drawing-for-tests'],
+    });
+    return this.browser.newContext({ javaScriptEnabled: false });
   }
 
   listPages() {
@@ -104,9 +94,9 @@ export class WikiScraper {
   }
 
   async downloadPages() {
-    const browser = await this.init();
+    const browserContext = await this.init();
 
-    const page = await browser.newPage();
+    const page = await browserContext.newPage();
 
     for (const entry of ['/wiki/World_of_Warcraft_API', '/wiki/Events']) {
       await page.goto(this.resourceReference(entry));
@@ -149,21 +139,11 @@ export class WikiScraper {
   async scrapeFunctionPage(page: Page, resource: string) {
     await this.visitPage(page, resource);
 
-    const pageTitleSelector = match(resource)
-      .with(P.string.includes('CloseAllBags'), () => overrides.CloseAllBags.pageTitleSelector)
-      .otherwise(() => 'h1');
-
-    const pageTitleLocator = page.locator(pageTitleSelector).first();
+    const pageTitleLocator = page.locator(this.selector.overridable(resource, 'pageTitle')).first();
 
     const pageBody = page.locator('//div[@id="mw-content-text"]/div[@class="mw-parser-output"]');
 
-    const descriptionSelector = match(resource)
-      .with(P.string.includes('CloseAllBags'), () => overrides.CloseAllBags.descriptionSelector)
-      .with(P.string.includes('ChatFrame_AddChannel'), () => overrides.ChatFrame_AddChannel.descriptionSelector)
-      .otherwise(() => '> p:first-of-type');
-
-    const descriptionLocator = pageBody.locator(descriptionSelector);
-
+    const descriptionLocator = pageBody.locator(this.selector.overridable(resource, 'description'));
     const parametersHeaderLocator = pageBody.locator('h2:has(> #Arguments)');
     const returnsHeaderLocator = pageBody.locator('h2:has(> #Returns)');
     const eventTriggersHeaderLocator = pageBody.locator('h2:has(> #Triggers_events)');
@@ -171,16 +151,10 @@ export class WikiScraper {
 
     const [pageTitle, description, parameterLocators, returnLocators, eventTriggerLocators, patchChangeLocators] =
       await Promise.all([
-        pageTitleLocator.textContent({ timeout: Duration.fromSeconds(5).asMillis() }).then((content) =>
-          match(content)
-            .with(P.string.includes('CloseAllBags'), overrides.CloseAllBags.pageTitleFormat)
-            .otherwise(() => content?.trim()),
-        ),
-        descriptionLocator.textContent().then((content) =>
-          match(content)
-            .with(P.string.includes('CloseAllBags'), overrides.CloseAllBags.descriptionFormat)
-            .otherwise(() => content?.trim()),
-        ),
+        pageTitleLocator
+          .textContent({ timeout: Duration.fromSeconds(5).asMillis() })
+          .then(this.formatter.overridable(resource, 'pageTitle')),
+        descriptionLocator.textContent().then(this.formatter.overridable(resource, 'description')),
         parametersHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
         returnsHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
         eventTriggersHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
@@ -246,7 +220,7 @@ export class WikiScraper {
   }
 
   async scrape(forceDownload: boolean) {
-    const browser = await this.init();
+    const browserContext = await this.init();
 
     const subpages = this.listPages().reduce<{ functions: string[]; events: string[] }>(
       (pages, page) => {
@@ -268,14 +242,13 @@ export class WikiScraper {
       await this.downloadPages();
     }
 
-    const page = await browser.newPage();
-
     const functions: FunctionSignature[] = [];
     const events: EventSignature[] = [];
 
+    const page = await browserContext.newPage();
+
     for (const subpage of subpages.functions) {
       const func = await this.scrapeFunctionPage(page, subpage);
-
       if (!func) {
         continue;
       }
@@ -295,7 +268,7 @@ export class WikiScraper {
 
     console.log('Scraping completed');
 
-    await browser.close();
+    await browserContext.browser()?.close();
 
     return { functions, events };
   }
@@ -340,7 +313,9 @@ export async function extractFunction({
   eventTriggerLocators,
   patchChangeLocators,
 }: ExtractFunctionInput) {
-  const [ns, name] = splitStringByPeriodColon(pageTitle.replace(/\(|\)/g, ''));
+  const saneName = pageTitle.replace(/\(|\)/g, '');
+  const [ns, title] = splitStringOnceBy(saneName, '.');
+  const [iface, name] = splitStringOnceBy(title, ':');
 
   const [parameters = [], returns = []] = await Promise.all(
     [parameterLocators, returnLocators].map(async (locators) => {
@@ -398,14 +373,18 @@ export async function extractFunction({
     return t.match(/removed/i);
   });
 
+  const semverRange = extractSemanticRange(since, until);
+  console.info(`${iface ? `${iface}:` : ''}${name} ${ns ? `(${ns})` : ''} ${semverRange.format()}`);
+
   return {
     name,
     ns,
+    iface,
     description,
     parameters: parameters.flat(),
     returns: returns.flat(),
     events,
-    version: extractSemanticRange(since, until),
+    version: semverRange,
   };
 }
 
@@ -425,7 +404,9 @@ export async function extractEvent({
   eventTriggerLocators,
   patchChangeLocators,
 }: ExtractFunctionInput) {
-  const [ns, name] = splitStringByPeriodColon(pageTitle);
+  const saneName = pageTitle.replace(/\(|\)/g, '');
+  const [ns, title] = splitStringOnceBy(saneName, '.');
+  const [iface, name] = splitStringOnceBy(title, ':');
 
   const [parameters = [], returns = []] = await Promise.all(
     [parameterLocators, returnLocators].map(async (locators) => {

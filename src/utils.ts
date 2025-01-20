@@ -28,14 +28,14 @@ export function unhandledBranch(field: unknown) {
   console.warn('Unhandled branch for field', field, branchLocation.trim());
 }
 
-export function splitStringByPeriodColon(title: string): [string | undefined, string] {
-  const [ns, namespacedTitle] = title.split(/\.|:/);
+export function splitStringOnceBy(title: string, separator: string): [string | undefined, string] {
+  const [left, ...right] = title.split(separator);
 
-  if (!namespacedTitle) {
-    return [undefined, ns];
+  if (!right.length) {
+    return [undefined, left];
   }
 
-  return [ns, namespacedTitle];
+  return [left, right.join(separator)];
 }
 
 export function serializeLocalFileURL(relativeDirectory: string, resourcePath: string) {
