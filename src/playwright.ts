@@ -20,6 +20,15 @@ export class Selector {
     API_GMRequestPlayerInfo: {
       description: '> h2 ~ dl',
     },
+    API_GetNumDisplayChannels: {
+      description: '> h2 ~ ul',
+    },
+    API_GetQuestFactionGroup: {
+      description: '> pre',
+    },
+    API_GetRepairAllCost: {
+      description: '> h2:nth-of-type(2) ~ dl',
+    },
     // Example is above the snippet and there's a empty paragraph at the top of
     // the page :shrug:
     API_ChatFrame_AddChannel: {

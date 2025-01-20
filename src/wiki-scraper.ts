@@ -162,7 +162,7 @@ export class WikiScraper {
           patchChangesHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
         ] as const);
 
-      if (!pageTitle || !description) {
+      if (!pageTitle) {
         throw new Error(`Needs special handling: ${JSON.stringify({ pageTitle })} ${JSON.stringify({ description })}`);
       }
 
