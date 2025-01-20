@@ -5,13 +5,17 @@ export class Selector {
   overrides: Omit<Record<string, Partial<Record<keyof Selector, string>>>, 'overrides'> = {
     // CloseAllBags redirects to OpenAllBags where it and two other functions are
     // listed in a bullet list
-    'wiki/API_CloseAllBags': {
-      pageTitle: 'h1',
+    API_CloseAllBags: {
+      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(2)',
+      description: '> ul:first-of-type > li:nth-child(2)',
+    },
+    API_CloseBackpack: {
+      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(2)',
       description: '> ul:first-of-type > li:nth-child(2)',
     },
     // Example is above the snippet and there's a empty paragraph at the top of
     // the page :shrug:
-    'wiki/ChatFrame_AddChannel': {
+    API_ChatFrame_AddChannel: {
       description: '> p:nth-of-type(2)',
     },
   };
@@ -41,7 +45,7 @@ export class Formatter {
   overrides: Omit<Record<string, Partial<Record<keyof Selector, FormatFunction>>>, 'overrides'> = {
     // CloseAllBags redirects to OpenAllBags where it and two other functions are
     // listed in a bullet list
-    'wiki/API_CloseAllBags': {
+    API_CloseAllBags: {
       pageTitle: (str) => {
         if (!str) {
           return '';
@@ -57,6 +61,34 @@ export class Formatter {
 
         const [, ...rhs] = str.split(' ');
         return rhs.join(' ');
+      },
+    },
+    API_CloseBackpack: {
+      pageTitle: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [left] = str.split('()');
+        return left;
+      },
+      description: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [, ...rhs] = str.split(' ');
+        return rhs.join(' ');
+      },
+    },
+    API_ChatFrame_AddChannel: {
+      pageTitle: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [left] = str.split('()');
+        return left;
       },
     },
   };

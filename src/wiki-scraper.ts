@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import camelCase from 'lodash/camelCase.js';
 import { type Browser, type Locator, type Page, chromium } from 'playwright';
@@ -36,13 +36,15 @@ export class WikiScraper {
     this.browser ||= await chromium.launch({
       args: ['--disable-gl-drawing-for-tests'],
     });
-    return this.browser.newContext({ javaScriptEnabled: false });
+
+    const context = await this.browser.newContext({ javaScriptEnabled: false });
+    context.setDefaultTimeout(Duration.fromSeconds(5).asMillis());
+
+    return context;
   }
 
   listPages() {
-    const pages = readdirSync(join(this.cacheDirectory, 'wiki')).map((p) =>
-      join('wiki', p.substring(0, p.lastIndexOf('.'))),
-    );
+    const pages = readdirSync(join(this.cacheDirectory, 'wiki')).map((p) => p.substring(0, p.lastIndexOf('.')));
 
     for (const page of pages) {
       const localFileURL = serializeLocalFileURL(this.cacheDirectory, page);
@@ -53,8 +55,9 @@ export class WikiScraper {
   }
 
   resourceReference(path: string) {
-    const page = this.cachedFiles[path] || `${this.origin}/${path}`;
-    console.info('Visiting', page);
+    const page = this.cachedFiles[path] || `${this.origin}/wiki/${path}`;
+    const basenamePage = basename(page);
+    console.info(`Visiting: ${basenamePage.substring(0, basenamePage.lastIndexOf('.'))}`);
     return page;
   }
 
@@ -98,7 +101,7 @@ export class WikiScraper {
 
     const page = await browserContext.newPage();
 
-    for (const entry of ['/wiki/World_of_Warcraft_API', '/wiki/Events']) {
+    for (const entry of ['World_of_Warcraft_API', 'Events']) {
       await page.goto(this.resourceReference(entry));
       await this.cachePage(page, entry);
 
@@ -149,30 +152,36 @@ export class WikiScraper {
     const eventTriggersHeaderLocator = pageBody.locator('h2:has(> #Triggers_events)');
     const patchChangesHeaderLocator = pageBody.locator('h2:has(> #Patch_changes)');
 
-    const [pageTitle, description, parameterLocators, returnLocators, eventTriggerLocators, patchChangeLocators] =
-      await Promise.all([
-        pageTitleLocator
-          .textContent({ timeout: Duration.fromSeconds(5).asMillis() })
-          .then(this.formatter.overridable(resource, 'pageTitle')),
-        descriptionLocator.textContent().then(this.formatter.overridable(resource, 'description')),
-        parametersHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
-        returnsHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
-        eventTriggersHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
-        patchChangesHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
-      ] as const);
+    try {
+      const [pageTitle, description, parameterLocators, returnLocators, eventTriggerLocators, patchChangeLocators] =
+        await Promise.all([
+          pageTitleLocator.textContent().then(this.formatter.overridable(resource, 'pageTitle')),
+          descriptionLocator.textContent().then(this.formatter.overridable(resource, 'description')),
+          parametersHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
+          returnsHeaderLocator.locator('//following-sibling::dl[1]/dd/dl').all(),
+          eventTriggersHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
+          patchChangesHeaderLocator.locator('//following-sibling::ul[1]/li').all(),
+        ] as const);
 
-    if (!pageTitle || !description) {
-      throw new Error(`Needs special handling: ${{ pageTitle }} ${{ description }}`);
+      if (!pageTitle || !description) {
+        throw new Error(`Needs special handling: ${JSON.stringify({ pageTitle })} ${JSON.stringify({ description })}`);
+      }
+
+      return extractFunction({
+        pageTitle,
+        description,
+        parameterLocators,
+        returnLocators,
+        eventTriggerLocators,
+        patchChangeLocators,
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      }
+
+      return null;
     }
-
-    return extractFunction({
-      pageTitle,
-      description,
-      parameterLocators,
-      returnLocators,
-      eventTriggerLocators,
-      patchChangeLocators,
-    });
   }
 
   async scrapeEventPage(page: Page, resource: string) {
@@ -225,11 +234,12 @@ export class WikiScraper {
     const subpages = this.listPages().reduce<{ functions: string[]; events: string[] }>(
       (pages, page) => {
         match(page)
-          .with(P.string.includes('wiki/API'), (p) => {
+          .with(P.string.startsWith('API'), (p) => {
             pages.functions.push(p);
           })
           .otherwise((p) => {
-            pages.events.push(p);
+            // This needs to be properly handled
+            // pages.events.push(p);
           });
 
         return pages;
@@ -247,7 +257,9 @@ export class WikiScraper {
 
     const page = await browserContext.newPage();
 
-    for (const subpage of subpages.functions) {
+    for (const [i, subpage] of subpages.functions.map((f, i) => [i, f] as const)) {
+      process.stdout.write(`${`${i}`.padStart(4, ' ')}`);
+
       const func = await this.scrapeFunctionPage(page, subpage);
       if (!func) {
         continue;
@@ -374,7 +386,7 @@ export async function extractFunction({
   });
 
   const semverRange = extractSemanticRange(since, until);
-  console.info(`${iface ? `${iface}:` : ''}${name} ${ns ? `(${ns})` : ''} ${semverRange.format()}`);
+  console.info(`     └ ${iface ? `${iface}:` : ''}${name} ${ns ? `(${ns})` : ''} ${semverRange.format()}`);
 
   return {
     name,

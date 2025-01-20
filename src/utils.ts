@@ -39,7 +39,7 @@ export function splitStringOnceBy(title: string, separator: string): [string | u
 }
 
 export function serializeLocalFileURL(relativeDirectory: string, resourcePath: string) {
-  const filePath = path.join(relativeDirectory, `${resourcePath}.html`);
+  const filePath = path.join(relativeDirectory, 'wiki', `${resourcePath}.html`);
   const fullFilePath = `${process.cwd()}/${filePath}`;
   const localFileURL = new URL(`file://${fullFilePath}`);
 
