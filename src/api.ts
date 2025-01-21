@@ -1,4 +1,6 @@
-import { Range, SemVer, satisfies as semverSatisfies } from 'semver';
+import { Range, SemVer, satisfies as semverSatisfies, subset } from 'semver';
+import { P, match } from 'ts-pattern';
+
 import {
   type APISchema,
   type EventSignature,
@@ -31,6 +33,8 @@ function identicalSignature(s: VariableSignature) {
     });
 }
 
+// NOTE: Making this generic for SemVer | Range results in too deep of a type
+// signature with the use of match
 export class Version {
   version: SemVer | Range;
 
@@ -39,30 +43,38 @@ export class Version {
   }
 
   extend(extendingVersion: SemVer | Range) {
-    if (extendingVersion instanceof SemVer && this.version instanceof SemVer) {
-      this.version = new Range(`${this.version} || ${extendingVersion.version}`);
-      return;
-    }
+    this.version = match([this.version, extendingVersion])
+      .with([P.instanceOf(SemVer), P.instanceOf(SemVer)], ([left, right]) => {
+        return new Range(`${left.version} || ${right.version}`);
+      })
+      .with([P.instanceOf(Range), P.instanceOf(SemVer)], ([left, right]) => {
+        const isOutsideRange = !semverSatisfies(right.version, left);
+        if (!isOutsideRange) {
+          return new Range(left.format());
+        }
 
-    if (this.version instanceof Range && extendingVersion instanceof SemVer) {
-      const isOutsideRange = !semverSatisfies(extendingVersion, this.version);
-      if (isOutsideRange) {
-        this.version = new Range(`${this.version.format()} || ${extendingVersion.version}`);
-      }
+        return new Range(`${left.format()} || ${right.version}`);
+      })
+      .with([P.instanceOf(SemVer), P.instanceOf(Range)], ([left, right]) => {
+        const isOutsideRange = !semverSatisfies(left, right);
+        if (isOutsideRange) {
+          return new Range(`${left.version} || ${right.format()}`);
+        }
 
-      return;
-    }
+        return new Range(right.format());
+      })
+      .with([P.instanceOf(Range), P.instanceOf(Range)], ([left, right]) => {
+        if (subset(left, right)) {
+          return new Range(right.format());
+        }
 
-    if (this.version instanceof SemVer && extendingVersion instanceof Range) {
-      const isOutsideRange = !semverSatisfies(this.version, extendingVersion);
-      if (isOutsideRange) {
-        this.version = new Range(`${this.version.version} || ${extendingVersion.format()}`);
-      } else {
-        this.version = new Range(extendingVersion.format());
-      }
+        if (subset(right, left)) {
+          return new Range(left.format());
+        }
 
-      return;
-    }
+        return new Range(`${left.format()} ${right.format()}`);
+      })
+      .exhaustive();
   }
 
   toJSON() {
@@ -117,19 +129,31 @@ export class APIFunction extends Version implements FunctionSignature {
 
 export type APITableProps = {
   name: string;
+  description?: string;
+  type?: string;
   ns?: string;
   fields: VariableSignature[];
+  parameters?: VariableSignature[];
+  values?: VariableSignature[];
   version: SemVer | Range;
 };
 export class APITable extends Version implements TableSignature {
   name: string;
+  description: string;
+  type: string;
   fields: VariableSignature[];
+  parameters: VariableSignature[];
+  values: VariableSignature[];
   ns: string;
 
   constructor(props: APITableProps) {
     super(props.version);
     this.name = props.name;
+    this.description = props.description || '';
+    this.type = props.type || '';
     this.fields = props.fields;
+    this.parameters = props.parameters || [];
+    this.values = props.values || [];
     this.ns = props.ns || API.DEFAULT_NAMESPACE;
   }
 
@@ -146,6 +170,7 @@ export class APITable extends Version implements TableSignature {
 
 export type APIEventProps = {
   name: string;
+  description?: string;
   literalName: string;
   ns?: string;
   payload: VariableSignature[];
@@ -153,6 +178,7 @@ export type APIEventProps = {
 };
 export class APIEvent extends Version implements EventSignature {
   name: string;
+  description: string;
   literalName: string;
   payload: VariableSignature[];
   ns: string;
@@ -160,6 +186,7 @@ export class APIEvent extends Version implements EventSignature {
   constructor(props: APIEventProps) {
     super(props.version);
     this.name = props.name;
+    this.description = props.description || '';
     this.literalName = props.literalName;
     this.payload = props.payload;
     this.ns = props.ns || API.DEFAULT_NAMESPACE;
@@ -276,15 +303,10 @@ class FilteredAPI extends API {
   }
 }
 
-type APIBuilderProps = {
-  outDir: string;
-};
 export class APIBuilder {
-  private outDir: string;
   private apis: API[];
 
-  constructor(props: APIBuilderProps) {
-    this.outDir = props.outDir;
+  constructor() {
     this.apis = [];
   }
 

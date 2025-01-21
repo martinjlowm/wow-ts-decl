@@ -1,4 +1,7 @@
-export function expectToBeInstanceOf<T, A>(arg: unknown, ctor: new (...args: A[]) => T): asserts arg is T {
+export function expectToBeInstanceOf<T, A extends unknown[]>(
+  arg: unknown,
+  ctor: new (...args: A) => T,
+): asserts arg is T {
   expect(arg).toBeInstanceOf(ctor);
 }
 

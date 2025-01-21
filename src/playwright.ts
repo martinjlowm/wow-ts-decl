@@ -3,15 +3,19 @@ export class Selector {
   description = '> p:first-of-type';
 
   overrides: Omit<Record<string, Partial<Record<keyof Selector, string>>>, 'overrides'> = {
+    API_OpenAllBags: {
+      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(1)',
+      description: '> ul:first-of-type > li:nth-child(1)',
+    },
     // CloseAllBags redirects to OpenAllBags where it and two other functions are
     // listed in a bullet list
     API_CloseAllBags: {
       pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(2)',
       description: '> ul:first-of-type > li:nth-child(2)',
     },
-    API_OpenAllBags: {
-      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(1)',
-      description: '> ul:first-of-type > li:nth-child(1)',
+    API_ToggleAllBags: {
+      pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(3)',
+      description: '> ul:first-of-type > li:nth-child(3)',
     },
     API_OpenBackpack: {
       pageTitle: '#mw-content-text > .mw-parser-output > ul:first-of-type > li:nth-child(1)',
