@@ -257,7 +257,7 @@ export class WikiScraper {
     const page = await browserContext.newPage();
 
     for (const [i, subpage] of subpages.functions.map((f, i) => [i, f] as const)) {
-      process.stdout.write(`${`${i}`.padStart(4, ' ')}`);
+      process.stdout.write(`${`${i}`.padStart(4, ' ')} `);
 
       const func = await this.scrapeFunctionPage(page, subpage);
       if (!func) {
@@ -385,7 +385,15 @@ export async function extractFunction({
   });
 
   const semverRange = extractSemanticRange(since, until);
-  console.info(`     └ ${iface ? `${iface}:` : ''}${name} ${ns ? `(${ns})` : ''} ${semverRange.format()}`);
+  console.info(
+    `     └ ${iface ? `${iface}:` : ''}${name}(${parameters
+      .flat()
+      .map((p) => p.name)
+      .join(', ')}): [${returns
+      .flat()
+      .map((p) => p.name)
+      .join(', ')}] ${ns ? `(${ns})` : ''} ${semverRange.format()}`,
+  );
 
   return {
     name,
