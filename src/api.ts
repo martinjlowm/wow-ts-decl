@@ -90,6 +90,7 @@ export type APIFunctionProps = {
   name: string;
   description?: string;
   ns?: string;
+  iface?: string;
   parameters: VariableSignature[];
   returns: VariableSignature[];
   events?: ListItemDescription[];
@@ -98,6 +99,7 @@ export type APIFunctionProps = {
 export class APIFunction extends Version implements FunctionSignature {
   name: string;
   description: string;
+  iface?: string;
   parameters: VariableSignature[];
   returns: VariableSignature[];
   events: ListItemDescription[];
@@ -113,6 +115,7 @@ export class APIFunction extends Version implements FunctionSignature {
     this.version = props.version;
     this.events = props.events || [];
     this.ns = props.ns || API.DEFAULT_NAMESPACE;
+    this.iface = props.iface;
   }
 
   identicalTo(func: APIFunction) {
