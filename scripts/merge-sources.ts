@@ -18,11 +18,11 @@ const argv = await yargs(process.argv.slice(2))
   })
   .option('out-dir', {
     describe: 'Directory to emit output',
-    default: 'dist',
+    default: '.tmp',
     type: 'string',
   })
   .positional('semver', {
-    describe: 'The (semver) versions to generate documentation for',
+    describe: 'The (semver) versions to merge documentation for',
     default: ['1.15.4'],
     type: 'string',
     array: true,

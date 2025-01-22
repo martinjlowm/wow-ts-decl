@@ -23,7 +23,7 @@ const argv = await yargs(process.argv.slice(2))
   })
   .option('out-dir', {
     describe: 'Directory to emit output',
-    default: 'dist',
+    default: '.tmp',
     type: 'string',
   })
   .option('wiki-origin-endpoint', {
