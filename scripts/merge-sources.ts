@@ -32,8 +32,8 @@ const argv = await yargs(process.argv.slice(2))
 
 const { inDir, outDir, semver } = argv;
 
-const files = readdirSync(inDir).filter((file) => file.endsWith('.json'));
-const apiBuilder = new APIBuilder({ outDir });
+const files = readdirSync(inDir).filter((file) => file.endsWith('.json') && !file.startsWith('merged'));
+const apiBuilder = new APIBuilder();
 
 const validVersions = semver.filter((v) => valid(v));
 
@@ -41,24 +41,18 @@ console.info('Building for:', validVersions.join(', '));
 
 for (const version of validVersions) {
   for (const file of files) {
-    try {
-      const api = API.load(readFileSync(join(inDir, file)).toString());
-      const filteredAPI = api.filterForVersion(new SemVer(version));
-      apiBuilder.add(filteredAPI);
-    } catch (error) {
-      console.error(error.message);
-      console.log(join(inDir, file));
-    }
-    break;
+    const api = API.load(readFileSync(join(inDir, file)).toString());
+    apiBuilder.add(api);
   }
-}
 
-const api = apiBuilder.merge();
-if (!api) {
-  console.error('Failed to merge APIs');
-  process.exit(1);
-}
-// TODO: Emit declarations in a tree within dist
+  const api = apiBuilder.merge();
+  if (!api) {
+    console.error('Failed to merge APIs');
+    process.exit(1);
+  }
 
-const output = resolve(outDir, 'merged.json');
-writeFileSync(output, api.serialize());
+  const filteredAPI = api.filterForVersion(new SemVer(version));
+
+  const output = resolve(outDir, `merged-${version}.json`);
+  writeFileSync(output, filteredAPI.serialize());
+}
