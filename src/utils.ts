@@ -72,7 +72,7 @@ export function extractSemanticRange(since: string | undefined, until: string | 
     range.push(`<${parsedUntil}`);
   }
 
-  return new Range(range.join(' ') || '*');
+  return new Range(range.join(' ') || '');
 }
 
 export function trimExtension(str: string) {
