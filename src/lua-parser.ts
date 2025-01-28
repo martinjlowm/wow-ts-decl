@@ -316,55 +316,118 @@ export function toEvent(event: EventSignature, field: luaparse.TableKeyString) {
   return event;
 }
 
-export function toVariableSignature(signature: VariableSignature, field: luaparse.TableKeyString) {
-  switch (true) {
-    case isName(field): {
-      signature.name = camelCase(JSON.parse(field.value.raw)).replace('Afk', 'AFK');
-      break;
-    }
-    case isDefault(field): {
-      if (field.value.type !== 'UnaryExpression') {
-        signature.default = field.value.value || JSON.parse(field.value.raw);
-      }
-      break;
-    }
-    case isValue(field): {
-      // This needs proper parsing... it can be a UnaryExpression - skip it for now...
-      // A value can also be a constant reference - not supported for now
-      break;
-    }
-    case isType(field): {
-      signature.type = explicitlyMapType(JSON.parse(field.value.raw));
-      break;
-    }
-    case isMixin(field): {
-      signature.mixin = JSON.parse(field.value.raw);
-      break;
-    }
-    case isStrideIndex(field): {
-      signature.strideIndex = JSON.parse(field.value.raw);
-      break;
-    }
-    case isDocumentation(field): {
-      signature.description = field.value.fields
-        .filter(isTableValue)
-        .map((v) => JSON.parse(v.value.raw))
-        .join('\n');
-      break;
-    }
-    case isNilable(field): {
-      signature.nilable = field.value.value;
-      break;
-    }
-    case isEnumValue(field): {
-      // Don't care
-      break;
-    }
-    default:
-      unhandledBranch(field);
-  }
+function isStringLiteral(v: { type: string }): v is luaparse.StringLiteral {
+  return v.type === 'StringLiteral';
+}
 
-  return signature;
+function isBooleanLiteral(v: { type: string }): v is luaparse.BooleanLiteral {
+  return v.type === 'BooleanLiteral';
+}
+function isNumericLiteral(v: { type: string }): v is luaparse.NumericLiteral {
+  return v.type === 'NumericLiteral';
+}
+function isUnaryExpression(v: { type: string }): v is luaparse.UnaryExpression {
+  return v.type === 'UnaryExpression';
+}
+function isMemberExpression(v: { type: string }): v is luaparse.MemberExpression {
+  return v.type === 'MemberExpression';
+}
+function isIdentifier(v: { type: string }): v is luaparse.Identifier {
+  return v.type === 'Identifier';
+}
+function isBinaryExpression(v: { type: string }): v is luaparse.BinaryExpression {
+  return v.type === 'BinaryExpression';
+}
+
+function toLiteral(value: { type: string }): string | number | boolean {
+  return match(value)
+    .with(P.when(isStringLiteral), (v) => v.value)
+    .with(P.when(isNumericLiteral), (v) => v.value)
+    .with(P.when(isUnaryExpression), (v) => {
+      const sign = v.operator === '-' ? -1 : 1;
+
+      if (isStringLiteral(v.argument)) {
+        return `${sign}${v.argument.raw}`;
+      }
+
+      if (!isNumericLiteral(v.argument)) {
+        return 0;
+      }
+
+      return sign * (JSON.parse(v.argument.raw) as number);
+    })
+    .with(P.when(isBinaryExpression), (v) => {
+      const sign = match(v.operator)
+        .with('-', () => -1)
+        .otherwise(() => 1);
+      const left = toLiteral(v.left);
+      const right = toLiteral(v.right);
+      if (
+        typeof left === 'string' ||
+        typeof right === 'string' ||
+        typeof left === 'boolean' ||
+        typeof right === 'boolean'
+      ) {
+        return `${left} ${v.operator} ${right}`;
+      }
+
+      return left + sign * right;
+    })
+    .otherwise(() => 0);
+}
+
+export function toVariableSignature(parentType: string) {
+  return (signature: VariableSignature, field: luaparse.TableKeyString) => {
+    switch (true) {
+      case isName(field): {
+        if (parentType === 'Enumeration') {
+          signature.name = JSON.parse(field.value.raw);
+        } else {
+          signature.name = camelCase(JSON.parse(field.value.raw)).replace('Afk', 'AFK');
+        }
+        break;
+      }
+      case isDefault(field): {
+        if (field.value.type !== 'UnaryExpression') {
+          signature.default = field.value.value || JSON.parse(field.value.raw);
+        }
+        break;
+      }
+      case isType(field): {
+        signature.type = explicitlyMapType(JSON.parse(field.value.raw));
+        break;
+      }
+      case isMixin(field): {
+        signature.mixin = JSON.parse(field.value.raw);
+        break;
+      }
+      case isStrideIndex(field): {
+        signature.strideIndex = JSON.parse(field.value.raw);
+        break;
+      }
+      case isDocumentation(field): {
+        signature.description = field.value.fields
+          .filter(isTableValue)
+          .map((v) => JSON.parse(v.value.raw))
+          .join('\n');
+        break;
+      }
+      case isNilable(field): {
+        signature.nilable = field.value.value;
+        break;
+      }
+      case isValue(field) || isEnumValue(field): {
+        signature.value = toLiteral(field.value);
+        // This needs proper parsing... it can be a UnaryExpression - skip it for now...
+        // A value can also be a constant reference - not supported for now
+        break;
+      }
+      default:
+        unhandledBranch(field);
+    }
+
+    return signature;
+  };
 }
 
 export function isKeyValueField(
