@@ -92,7 +92,7 @@ function mapTypeNode(type: string) {
 
 function fileCategorizeEntry({ name, ns, iface }: { name: string; ns: string; iface?: string }) {
   const fileName = ns.replace('C_', '');
-  if (fileName !== 'WoWAPI') {
+  if (fileName !== API.DEFAULT_NAMESPACE) {
     if (fileName === 'PvP') {
       return 'pvp';
     }
@@ -104,7 +104,15 @@ function fileCategorizeEntry({ name, ns, iface }: { name: string; ns: string; if
     return kebabCase(iface);
   }
 
-  const keywords = name.split(/(?=[A-Z])/).map((word) => word.toLowerCase());
+  const keywords = name
+    .replace(/pvp/i, 'Pvp')
+    .replace(/GUID/, 'Guid')
+    .replace(/ID/, 'Id')
+    .replace(/UI/, 'Ui')
+    .replace(/AFK/, 'Afk')
+    .split(/(?=[A-Z])/)
+    .map((word) => word.toLowerCase());
+
   return keywords.find((keyword) => fileCategories.has(keyword)) || 'general';
 }
 
@@ -293,7 +301,7 @@ export function emitDeclarations(api: API, versions: string[]) {
 
     const nodes: Node[] = [];
 
-    const { WoWAPI: globalFunctions, ...namedspacedFunctions } = functions.reduce(
+    const { [API.DEFAULT_NAMESPACE]: globalFunctions, ...namedspacedFunctions } = functions.reduce(
       (namespaces, func) => {
         const list = namespaces[func.ns] || [];
         list.push(func);
