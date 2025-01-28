@@ -50,7 +50,6 @@ const explicitlyPassthroughTypes = [
   'ItemLocation',
   'AzeriteItemLocation',
   'NotificationDbId',
-  'Constants',
   'CalendarEventID',
   'ClubId',
   'ChatBubbleFrame',
@@ -125,29 +124,34 @@ const explicitlyPassthroughTypes = [
 ] as const;
 
 function explicitlyMapType(parsedType: string) {
-  return match(parsedType)
-    .with('cstring', 'textureAtlas', () => printList([createKeywordTypeNode(SyntaxKind.StringKeyword)]).trim())
-    .with('bool', () => printList([createKeywordTypeNode(SyntaxKind.BooleanKeyword)]).trim())
-    .with('XMLTemplateKeyValue', 'Structure', 'table', () =>
-      printList([createKeywordTypeNode(SyntaxKind.ObjectKeyword)]).trim(),
-    )
-    .with('Enumeration', () => printList([createEnumDeclaration(undefined, '', [])]).trim())
-    .with('WOWGUID', () => 'GUID')
-    .with(P.string.startsWith('vector'), P.string.startsWith('colorRGB'), 'textureKit', (v) => capitalize(v))
-    .with('fileID', () => 'FileId')
-    .with('Vocalerrorsounds', () => 'VocalErrorSounds')
-    .with('uiUnit', () => 'UIUnit')
-    .with('uiAddon', () => 'UIAddon')
-    .with('time_t', () => 'Date')
-    .with('string', 'number', 'SimpleTexture', ...explicitlyPassthroughTypes, (t) => t)
-    .with('luaIndex', () => 'LuaIndex')
-    .otherwise((t) => {
-      if (!visitedTypes.has(t)) {
-        typesMaybeNotAccountedFor.add(t);
-      }
+  return (
+    match(parsedType)
+      .with('cstring', 'textureAtlas', () => printList([createKeywordTypeNode(SyntaxKind.StringKeyword)]).trim())
+      .with('bool', () => printList([createKeywordTypeNode(SyntaxKind.BooleanKeyword)]).trim())
+      .with('XMLTemplateKeyValue', 'Structure', 'table', () =>
+        printList([createKeywordTypeNode(SyntaxKind.ObjectKeyword)]).trim(),
+      )
+      // Enumeration references are available as Enum.<entry> in the global scope -> declare const Enum: WoWAPI.Enum;
+      .with('Enumeration', () => 'Enum')
+      // Constants references are available as Constants.<entry> in the global scope -> declare const Constants: WoWAPI.Constants;
+      .with('Constants', () => 'Constants')
+      .with('WOWGUID', () => 'GUID')
+      .with(P.string.startsWith('vector'), P.string.startsWith('colorRGB'), 'textureKit', (v) => capitalize(v))
+      .with('fileID', () => 'FileId')
+      .with('Vocalerrorsounds', () => 'VocalErrorSounds')
+      .with('uiUnit', () => 'UIUnit')
+      .with('uiAddon', () => 'UIAddon')
+      .with('time_t', () => 'Date')
+      .with('string', 'number', 'SimpleTexture', ...explicitlyPassthroughTypes, (t) => t)
+      .with('luaIndex', () => 'LuaIndex')
+      .otherwise((t) => {
+        if (!visitedTypes.has(t)) {
+          typesMaybeNotAccountedFor.add(t);
+        }
 
-      return t;
-    });
+        return t;
+      })
+  );
 }
 
 export function toAPIDefinition(apiDefinition: Partial<FileAPIDocumentation>, field: luaparse.TableKeyString) {
@@ -176,8 +180,8 @@ export function toAPIDefinition(apiDefinition: Partial<FileAPIDocumentation>, fi
       break;
     }
     case isTableList(field): {
-      apiDefinition.tables = field.value.fields.filter(isTableField).map((func) => {
-        return func.value.fields.filter(isKeyValueField).reduce(toTable, {} as TableSignature);
+      apiDefinition.tables = field.value.fields.filter(isTableField).map((table) => {
+        return table.value.fields.filter(isKeyValueField).reduce(toTable, {} as TableSignature);
       });
       break;
     }

@@ -98,7 +98,43 @@ export class Formatter {
         return rhs.join(' ');
       },
     },
+    API_OpenBackpack: {
+      pageTitle: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [left] = str.split('()');
+        return left;
+      },
+      description: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [, ...rhs] = str.split(' ');
+        return rhs.join(' ');
+      },
+    },
     API_CloseBackpack: {
+      pageTitle: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [left] = str.split('()');
+        return left;
+      },
+      description: (str) => {
+        if (!str) {
+          return '';
+        }
+
+        const [, ...rhs] = str.split(' ');
+        return rhs.join(' ');
+      },
+    },
+    API_OpenBag: {
       pageTitle: (str) => {
         if (!str) {
           return '';

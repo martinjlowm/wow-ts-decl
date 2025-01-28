@@ -45,6 +45,10 @@ export class Version {
   extend(extendingVersion: SemVer | Range) {
     this.version = match([this.version, extendingVersion])
       .with([P.instanceOf(SemVer), P.instanceOf(SemVer)], ([left, right]) => {
+        if (left.version.includes(right.version)) {
+          return new Range(left.format());
+        }
+
         return new Range(`${left.version} || ${right.version}`);
       })
       .with([P.instanceOf(Range), P.instanceOf(SemVer)], ([left, right]) => {

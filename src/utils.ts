@@ -10,7 +10,7 @@ const printer = createPrinter();
 const buffer = createSourceFile('foo.ts', '', ScriptTarget.ES2024);
 
 export function printList(nodes: Node[]) {
-  return printer.printList(ListFormat.MultiLine, createNodeArray(nodes), buffer);
+  return printer.printList(ListFormat.MultiLine, createNodeArray(nodes), buffer).replace(/^[^_\n]*__REMOVE__$/gm, '');
 }
 
 export async function sleep(ms: number) {
