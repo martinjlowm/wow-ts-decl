@@ -5,27 +5,42 @@ import { Range, SemVer, satisfies as semverSatisfies } from 'semver';
 import { P, match } from 'ts-pattern';
 import { type Node, NodeFlags, SyntaxKind, addSyntheticLeadingComment, factory } from 'typescript';
 
-import type { API, APIEvent, APIFunction, APITable } from '#@/api.js';
+import type { APIEvent, APIFunction, APITable } from '#@/api.js';
+import { API } from '#@/api.js';
 import * as luaFactory from '#@/factory.js';
+import type { VariableSignature } from '#@/types.js';
 import { printList } from '#@/utils.js';
 
 const {
-  createImportDeclaration,
-  createToken,
-  createNull,
-  createLiteralTypeNode,
-  createJSDocUnknownTag,
-  createJSDocParameterTag,
-  createModuleBlock,
-  createUnionTypeNode,
-  createModuleDeclaration,
-  createJSDocReturnTag,
-  createJSDocComment,
+  createFalse,
   createIdentifier,
-  createNamedTupleMember,
-  createKeywordTypeNode,
-  createParameterDeclaration,
+  createImportDeclaration,
+  createJSDocComment,
+  createPrefixUnaryExpression,
+  createJSDocParameterTag,
+  createJSDocReturnTag,
   createJSDocTypeExpression,
+  createJSDocUnknownTag,
+  createKeywordTypeNode,
+  createLiteralTypeNode,
+  createModuleBlock,
+  createModuleDeclaration,
+  createNamedTupleMember,
+  createNull,
+  createNumericLiteral,
+  createParameterDeclaration,
+  createStringLiteral,
+  createToken,
+  createTrue,
+  createTypeReferenceNode,
+  createUnionTypeNode,
+  createVariableDeclaration,
+  createVariableDeclarationList,
+  createVariableStatement,
+  createFunctionDeclaration,
+  createPropertySignature,
+  createTypeLiteralNode,
+  createInterfaceDeclaration,
 } = factory;
 
 const fileCategories = new Set([
@@ -170,7 +185,7 @@ function buildImports(entryNodes: string[]) {
     }
 
     const [firstDecl, ...restDecl] = reference.map((r) =>
-      createImportDeclaration(undefined, undefined, factory.createStringLiteral(`./${r}`), undefined),
+      createImportDeclaration(undefined, undefined, createStringLiteral(`./${r}`), undefined),
     );
 
     if (!firstDecl) {
@@ -220,7 +235,7 @@ function createFunction(func: APIFunction, ns: string | null) {
       );
     });
 
-  const functionDeclaration = factory.createFunctionDeclaration(
+  const functionDeclaration = createFunctionDeclaration(
     !ns ? [createToken(SyntaxKind.DeclareKeyword)] : undefined,
     undefined,
     createIdentifier(func.name),
@@ -275,6 +290,95 @@ function createFunction(func: APIFunction, ns: string | null) {
     addSyntheticLeadingComment(comment, SyntaxKind.SingleLineCommentTrivia, '__REMOVE__', true),
     functionDeclaration,
   ];
+}
+
+function createTable(table: APITable) {
+  function createField(fields: VariableSignature[]) {
+    const subfields = fields.map((v) => {
+      const literal = match(v.value)
+        .with(P.number, (n) =>
+          n < 0
+            ? createPrefixUnaryExpression(SyntaxKind.MinusToken, createNumericLiteral(Math.abs(n)))
+            : createNumericLiteral(n),
+        )
+        .with(P.string, (str) => createStringLiteral(str))
+        .with(P.boolean, (b) => (b ? createTrue() : createFalse()))
+        .otherwise(() => null);
+
+      const rhs = match(literal)
+        .with(null, () => {
+          return mapTypeNode(v.type);
+        })
+        .otherwise((r) => createLiteralTypeNode(r));
+
+      return createPropertySignature(undefined, createIdentifier(v.name), undefined, rhs);
+    });
+
+    return subfields;
+  }
+
+  return match(table.type)
+    .with('Enum', (t) => {
+      const fields = createField(table.fields);
+
+      const nodes: Node[] = [];
+
+      if (table.description) {
+        nodes.push(createJSDocComment(table.description, []));
+      }
+
+      nodes.push(
+        createPropertySignature(undefined, createIdentifier(table.name), undefined, createTypeLiteralNode(fields)),
+      );
+
+      return { type: t, nodes };
+    })
+    .with('Constants', (t) => {
+      const fields = createField(table.values);
+
+      const nodes: Node[] = [];
+
+      if (table.description) {
+        nodes.push(createJSDocComment(table.description, []));
+      }
+
+      nodes.push(
+        createPropertySignature(undefined, createIdentifier(table.name), undefined, createTypeLiteralNode(fields)),
+      );
+
+      return { type: t, nodes };
+    })
+    .otherwise(() => {
+      const fields = createField(table.fields);
+      const nodes: Node[] = [];
+
+      if (table.description) {
+        nodes.push(createJSDocComment(table.description, []));
+      }
+
+      nodes.push(
+        createInterfaceDeclaration(undefined, factory.createIdentifier(table.name), undefined, undefined, fields),
+      );
+      console.log(printList(nodes, fields));
+      return { type: null, nodes };
+    });
+}
+
+function createConstDeclaration(name: string, type: string) {
+  return createVariableStatement(
+    [createToken(SyntaxKind.DeclareKeyword)],
+    createVariableDeclarationList(
+      [
+        createVariableDeclaration(
+          createIdentifier(name),
+          undefined,
+          createTypeReferenceNode(createIdentifier(type), undefined),
+          undefined,
+        ),
+      ],
+      NodeFlags.Const | NodeFlags.Constant | NodeFlags.Constant | NodeFlags.ContextFlags,
+    ),
+  );
 }
 
 export function emitDeclarations(api: API, versions: string[]) {
@@ -335,7 +439,102 @@ export function emitDeclarations(api: API, versions: string[]) {
       nodes.push(...createFunction(func, null));
     }
 
-    console.log(printList(nodes));
+    const { [API.DEFAULT_NAMESPACE]: globalTables, ...namedspacedTables } = tables.reduce(
+      (namespaces, table) => {
+        const list = namespaces[table.ns] || [];
+        list.push(table);
+
+        namespaces[table.ns] = list;
+
+        return namespaces;
+      },
+      {} as Record<string, APITable[]>,
+    );
+
+    const scopedConstantNodes: Node[] = [];
+    const scopedEnumerationNodes: Node[] = [];
+
+    for (const [ns, tables] of Object.entries(namedspacedTables)) {
+      const scopedNodes: Node[] = [];
+
+      for (const table of tables) {
+        const { type, nodes } = createTable(table);
+
+        match(type)
+          .with('Constants', () => {
+            scopedConstantNodes.push(...nodes);
+          })
+          .with('Enum', () => {
+            scopedEnumerationNodes.push(...nodes);
+          })
+          .otherwise(() => {
+            scopedNodes.push(...nodes);
+          });
+      }
+
+      const mod = createModuleDeclaration(
+        [createToken(SyntaxKind.DeclareKeyword)],
+        createIdentifier(ns),
+        // biome-ignore lint/suspicious/noExplicitAny: Not officially supported, but there's no easy way to embed comments within a namespace
+        createModuleBlock(scopedNodes as unknown as any),
+        NodeFlags.Namespace | NodeFlags.ExportContext | NodeFlags.ContextFlags,
+      );
+
+      nodes.push(mod);
+    }
+
+    const scopedNodes: Node[] = [];
+    for (const table of globalTables || []) {
+      const { type, nodes } = createTable(table);
+
+      match(type)
+        .with('Constants', () => {
+          scopedConstantNodes.push(...nodes);
+        })
+        .with('Enum', () => {
+          scopedEnumerationNodes.push(...nodes);
+        })
+        .otherwise(() => {
+          scopedNodes.push(...nodes);
+        });
+    }
+
+    if (scopedConstantNodes.length) {
+      scopedNodes.push(
+        createInterfaceDeclaration(
+          undefined,
+          factory.createIdentifier('Constants'),
+          undefined,
+          undefined,
+          scopedConstantNodes,
+        ),
+      );
+    }
+
+    if (scopedEnumerationNodes.length) {
+      scopedNodes.push(
+        createInterfaceDeclaration(
+          undefined,
+          factory.createIdentifier('Enum'),
+          undefined,
+          undefined,
+          scopedEnumerationNodes,
+        ),
+      );
+    }
+
+    if (scopedNodes.length) {
+      const mod = createModuleDeclaration(
+        [createToken(SyntaxKind.DeclareKeyword)],
+        createIdentifier(API.DEFAULT_NAMESPACE),
+        // biome-ignore lint/suspicious/noExplicitAny: Not officially supported, but there's no easy way to embed comments within a namespace
+        createModuleBlock(scopedNodes as unknown as any),
+        NodeFlags.Namespace | NodeFlags.ExportContext | NodeFlags.ContextFlags,
+      );
+
+      nodes.push(mod);
+    }
+    console.log(printList(nodes).trim());
     // functions are global if === wowapi
     // tables follow ns always
   }
@@ -345,7 +544,11 @@ export function emitDeclarations(api: API, versions: string[]) {
       continue;
     }
 
-    printList(buildImports(entryNodes[version].values().toArray()));
+    printList([
+      ...buildImports(entryNodes[version].values().toArray()),
+      createConstDeclaration('Constants', `${API.DEFAULT_NAMESPACE}.Constants`),
+      createConstDeclaration('Enum', `${API.DEFAULT_NAMESPACE}.Enum`),
+    ]);
   }
   // console.log(Object.keys(namespacedFunctions));
   // for (const ns in api) {

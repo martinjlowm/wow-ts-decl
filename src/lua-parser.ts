@@ -199,7 +199,7 @@ export function toAPIDefinition(apiDefinition: Partial<FileAPIDocumentation>, fi
 }
 
 export function toProperty(field: TableField) {
-  return field.value.fields.filter(isKeyValueField).reduce(toVariableSignature, {} as VariableSignature);
+  return field.value.fields.filter(isKeyValueField).reduce(toVariableSignature(field.type), {} as VariableSignature);
 }
 
 export function toFunction(func: FunctionSignature, field: luaparse.TableKeyString) {
